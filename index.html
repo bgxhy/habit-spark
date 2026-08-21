@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f0f12">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Habit Spark - 习惯激励打卡应用">
+<title>Habit Spark 习惯激励</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app" class="app">
+
+  <!-- ============ 顶部资源栏 ============ -->
+  <header class="topbar" id="topbar">
+    <div class="res-pill" id="resPrimary" data-resource="primaryResource">
+      <span class="res-icon" id="iconPrimary">🔥</span>
+      <span class="res-value" id="valPrimary">0</span>
+    </div>
+    <div class="res-pill" id="resCurrency" data-resource="currency">
+      <span class="res-icon" id="iconCurrency">💎</span>
+      <span class="res-value" id="valCurrency">0</span>
+    </div>
+    <div class="res-pill" id="resShield" data-resource="streakFreeze">
+      <span class="res-icon" id="iconShield">🛡️</span>
+      <span class="res-value" id="valShield">0</span>
+    </div>
+  </header>
+
+  <!-- ============ 主舞台：侧边任务列表 + 中央火苗 ============ -->
+  <main class="stage">
+
+    <aside class="task-sidebar" id="taskSidebar" aria-label="任务列表">
+      <div class="task-sidebar-inner" id="taskList">
+        <div class="empty-state empty-state--tasks" id="taskListEmpty">
+          <span class="empty-state__icon">📋</span>
+          <p class="empty-state__text">还没有任务<br>去「任务管理」添加一个吧</p>
+        </div>
+        <!-- 任务项由 tasks.js / ui.js 动态渲染于此 -->
+      </div>
+    </aside>
+
+    <section class="flame-stage" id="flameStage" aria-label="连胜火苗">
+      <div class="flame-wrap" id="flameWrap">
+        <span class="streak-badge" id="streakBadge">1</span>
+
+        <div class="flame-glow" aria-hidden="true"></div>
+
+        <svg class="flame-svg" id="flameSvg" viewBox="0 0 200 240" aria-hidden="true">
+          <defs>
+            <linearGradient id="flameGradient" x1="0" y1="1" x2="0" y2="0">
+              <stop offset="0%" stop-color="var(--flame-red)"/>
+              <stop offset="55%" stop-color="var(--flame-orange)"/>
+              <stop offset="100%" stop-color="var(--primary-color)"/>
+            </linearGradient>
+          </defs>
+          <path class="flame-path" fill="url(#flameGradient)"
+            d="M100 8C70 46 46 78 46 120c0 40 24 74 54 90 30-16 54-50 54-90 0-22-10-42-22-58 2 20-6 34-18 40 8-22 2-46-14-94z"/>
+        </svg>
+
+        <div class="flame-count-wrap">
+          <span class="flame-count" id="streakCount">0</span>
+          <span class="flame-label" id="streakLabel">连胜天数</span>
+        </div>
+      </div>
+
+      <div class="particle-layer" id="particleLayer" aria-hidden="true"></div>
+    </section>
+
+  </main>
+
+  <!-- ============ 底部 Tab 导航 ============ -->
+  <nav class="bottom-nav" id="bottomNav" aria-label="主导航">
+    <button class="nav-btn" type="button" data-tab="shop" id="navShop">
+      <span class="nav-btn__icon">🛒</span>
+      <span class="nav-btn__label">商店</span>
+    </button>
+    <button class="nav-btn" type="button" data-tab="stats" id="navStats">
+      <span class="nav-btn__icon">📊</span>
+      <span class="nav-btn__label">统计</span>
+    </button>
+    <button class="nav-btn" type="button" data-tab="taskManager" id="navTaskManager">
+      <span class="nav-btn__icon">🗂️</span>
+      <span class="nav-btn__label">任务管理</span>
+    </button>
+    <button class="nav-btn" type="button" data-tab="settings" id="navSettings">
+      <span class="nav-btn__icon">⚙️</span>
+      <span class="nav-btn__label">设置</span>
+    </button>
+  </nav>
+
+  <!-- ============ 遮罩层（面板/弹窗共用） ============ -->
+  <div class="sheet-overlay" id="sheetOverlay"></div>
+
+  <!-- ============ 商店面板 ============ -->
+  <section class="tab-panel" id="panel-shop" data-panel="shop" aria-hidden="true">
+    <div class="panel-handle"></div>
+    <header class="panel-header">
+      <h2 class="panel-title">商店</h2>
+      <button class="panel-close" type="button" data-close-panel>×</button>
+    </header>
+    <div class="panel-content">
+
+      <div class="exchange-card" id="exchangePanel">
+        <h3 class="exchange-card__title">资源兑换</h3>
+        <p class="exchange-card__rate" id="exchangeRateLabel">
+          <span id="exchangeIconFrom">🔥</span> 100 → 1 <span id="exchangeIconTo">💎</span>
+        </p>
+        <div class="exchange-card__row">
+          <input type="number" min="0" step="1" class="exchange-input" id="exchangeAmountInput" placeholder="输入兑换数量">
+          <button class="btn btn--primary" type="button" id="exchangeBtn">兑换</button>
+        </div>
+        <p class="exchange-card__hint" id="exchangeResultLabel"></p>
+      </div>
+
+      <h3 class="section-subtitle">商品</h3>
+      <div class="shop-list" id="shopList">
+        <div class="empty-state" id="shopListEmpty">
+          <span class="empty-state__icon">🛍️</span>
+          <p class="empty-state__text">商店正在补货中</p>
+        </div>
+        <!-- 商店商品由 shop.js 动态渲染于此 -->
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 统计面板 ============ -->
+  <section class="tab-panel" id="panel-stats" data-panel="stats" aria-hidden="true">
+    <div class="panel-handle"></div>
+    <header class="panel-header">
+      <h2 class="panel-title">统计</h2>
+      <button class="panel-close" type="button" data-close-panel>×</button>
+    </header>
+    <div class="panel-content">
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-card__value" id="statCurrentStreak">0</span>
+          <span class="stat-card__label">当前连胜</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card__value" id="statLongestStreak">0</span>
+          <span class="stat-card__label">历史最长连胜</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card__value" id="statTotalTasks">0</span>
+          <span class="stat-card__label">累计完成任务</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card__value" id="statTotalPrimary">0</span>
+          <span class="stat-card__label" id="statTotalPrimaryLabel">🔥 累计获取</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-card__value" id="statTotalCurrency">0</span>
+          <span class="stat-card__label" id="statTotalCurrencyLabel">💎 累计获取</span>
+        </div>
+      </div>
+
+      <h3 class="section-subtitle">保护卡使用记录</h3>
+      <ul class="freeze-log" id="freezeLogList">
+        <div class="empty-state" id="freezeLogEmpty">
+          <span class="empty-state__icon">🛡️</span>
+          <p class="empty-state__text">暂无使用记录</p>
+        </div>
+        <!-- 保护卡使用记录由 ui.js 动态渲染于此 -->
+      </ul>
+
+    </div>
+  </section>
+
+  <!-- ============ 任务管理面板 ============ -->
+  <section class="tab-panel" id="panel-taskManager" data-panel="taskManager" aria-hidden="true">
+    <div class="panel-handle"></div>
+    <header class="panel-header">
+      <h2 class="panel-title">任务管理</h2>
+      <button class="panel-close" type="button" data-close-panel>×</button>
+    </header>
+    <div class="panel-content">
+
+      <div class="rescue-banner hidden" id="taskRescueBanner">
+        <span class="rescue-banner__icon">⏳</span>
+        <div class="rescue-banner__body">
+          <p class="rescue-banner__title" id="rescueBannerTitle">补救未完成任务</p>
+          <p class="rescue-banner__date" id="rescueBannerDate">--</p>
+        </div>
+        <button class="btn btn--ghost" type="button" id="rescueBannerBtn">补救</button>
+      </div>
+
+      <div class="task-manager-list" id="taskManagerList">
+        <div class="empty-state" id="taskManagerListEmpty">
+          <span class="empty-state__icon">🗂️</span>
+          <p class="empty-state__text">还没有任务，点击右下角「+」创建一个</p>
+        </div>
+        <!-- 任务管理列表由 tasks.js 动态渲染于此 -->
+      </div>
+
+    </div>
+    <button class="fab" type="button" id="addTaskBtn" aria-label="新增任务">+</button>
+  </section>
+
+  <!-- ============ 设置面板 ============ -->
+  <section class="tab-panel" id="panel-settings" data-panel="settings" aria-hidden="true">
+    <div class="panel-handle"></div>
+    <header class="panel-header">
+      <h2 class="panel-title">设置</h2>
+      <button class="panel-close" type="button" data-close-panel>×</button>
+    </header>
+    <div class="panel-content">
+
+      <h3 class="section-subtitle">数据管理</h3>
+      <div class="settings-card">
+        <button class="btn btn--block" type="button" id="exportDataBtn">
+          <span>导出数据备份</span>
+        </button>
+        <button class="btn btn--block btn--ghost" type="button" id="importDataBtn">
+          <span>导入数据备份</span>
+        </button>
+        <input type="file" id="importFileInput" accept="application/json,.json" hidden>
+        <p class="settings-card__hint">导入会覆盖当前所有进度，请谨慎操作</p>
+      </div>
+
+      <h3 class="section-subtitle">每日提醒</h3>
+      <div class="settings-card">
+        <div class="settings-row">
+          <label class="settings-row__label" for="reminderToggle">每日提醒总开关</label>
+          <label class="switch">
+            <input type="checkbox" id="reminderToggle">
+            <span class="switch__track"><span class="switch__thumb"></span></span>
+          </label>
+        </div>
+
+        <div class="settings-row settings-row--col">
+          <label class="settings-row__label" for="webhookUrlInput">企业微信 Webhook 地址</label>
+          <input type="url" class="text-input" id="webhookUrlInput"
+                 placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx">
+        </div>
+
+        <div class="settings-row">
+          <label class="settings-row__label" for="reminderTimeInput">提醒时间</label>
+          <input type="time" class="text-input text-input--time" id="reminderTimeInput" value="22:30">
+        </div>
+
+        <button class="btn btn--block btn--ghost" type="button" id="testWebhookBtn">发送测试消息</button>
+        <p class="settings-card__hint">开启后，若当日尚未打卡，将在设定时间通过 Webhook 推送提醒</p>
+      </div>
+
+      <p class="version-label">数据版本 v<span id="dataVersionLabel">1</span></p>
+
+    </div>
+  </section>
+
+  <!-- ============ 通用确认弹窗 ============ -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal" id="modalBox" role="dialog" aria-modal="true">
+      <h3 class="modal__title" id="modalTitle">提示</h3>
+      <p class="modal__message" id="modalMessage"></p>
+      <div class="modal__actions">
+        <button class="btn btn--ghost" type="button" id="modalCancelBtn">取消</button>
+        <button class="btn btn--primary" type="button" id="modalConfirmBtn">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Toast 提示容器 ============ -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+</div>
+
+<!-- 脚本按依赖顺序加载：config/data 打底 → 业务逻辑 → 表现层 → app.js 总装配 -->
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/tasks.js"></script>
+<script src="js/rewards.js"></script>
+<script src="js/streak.js"></script>
+<script src="js/shop.js"></script>
+<script src="js/collection.js"></script>
+<script src="js/backup.js"></script>
+<script src="js/notification.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

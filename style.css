@@ -290,9 +290,11 @@ h1, h2, h3, p { margin: 0; }
   flex: 1 1 auto;
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  padding: var(--space-1);  /* ← 改大这个值（比如 var(--space-6)），四周留白变多，图片相应变小 */
 }
 
 .flame-wrap {
@@ -300,7 +302,11 @@ h1, h2, h3, p { margin: 0; }
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
+  width: 100%;
+  height: 100%;    /* 【改动】撑满 .flame-stage 除 padding 外的可用空间 */
+  min-height: 0;   /* 【改动】flex 纵向布局下，子元素能正常收缩，避免撑破容器 */
 }
 
 .flame-glow {
@@ -478,14 +484,20 @@ h1, h2, h3, p { margin: 0; }
   background: var(--bg-elevated);
   border-top: 1px solid var(--border-strong);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  box-shadow: var(--shadow-panel);
+  box-shadow: none;                 /* 【改动】关闭状态不带阴影，避免透到底部导航栏 */
   transform: translateY(100%);
-  transition: transform 0.32s var(--ease-standard);
+  transition: transform 0.32s var(--ease-standard),
+              box-shadow 0.32s var(--ease-standard); /* 【改动】阴影跟随开合过渡，避免突兀 */
   z-index: 21;
   padding-bottom: env(safe-area-inset-bottom);
+  pointer-events: none;             /* 【改动】关闭状态整体不响应点击，双重保险 */
 }
 
-.tab-panel.open { transform: translateY(0); }
+.tab-panel.open {
+  transform: translateY(0);
+  box-shadow: var(--shadow-panel);  /* 【改动】只有打开时才应用阴影 */
+  pointer-events: auto;             /* 【改动】打开时恢复可点击 */
+}
 
 .panel-handle {
   width: 36px;
@@ -840,15 +852,18 @@ h1, h2, h3, p { margin: 0; }
 /* 视频容器：增大宽高并居中 */
 /* 巧虎专属：放大尺寸 + 混色滤掉视频黑底 */
 .flame-video-container {
-  width: 360px !important;    /* 进一步放大至 360px */
-  height: 360px !important;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: 600px;   /* ← 改这个数字，调宽度上限，比如改成 320px 会明显变小 */
+  max-height: 800px;  /* ← 【新增这一行】限制高度上限，是当前"太大"的关键，建议先加上再调数值 */
   margin: 0 auto 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent !important;
-  box-shadow: none !important; /* 移除卡片阴影 */
-  border: none !important;     /* 移除边框 */
+  box-shadow: none !important;
+  border: none !important;
   z-index: 2;
 }
 
@@ -856,6 +871,7 @@ h1, h2, h3, p { margin: 0; }
   width: 100% !important;
   height: 100% !important;
   object-fit: contain;
-  /* 关键：滤色模式，直接隐藏视频里的纯黑背景，只保留巧虎 */
-  mix-blend-mode: screen; 
+  mix-blend-mode: multiply;
+  -webkit-mask-image: radial-gradient(ellipse at center, black 46%, transparent 100%); /* 【新增】边缘羽化，彻底消除矩形轮廓 */
+  mask-image: radial-gradient(ellipse at center, black 46%, transparent 100%);
 }

@@ -50,6 +50,30 @@
     return getThemeById(themeId);
   }
 
+  /**
+   * 【新增】解析某个资源在"当前主题"下应展示的配置（name / icon 等）。
+   * 优先使用当前主题 theme.resources[resourceKey] 的覆盖值，
+   * 缺失字段回退到 CONFIG.resources[resourceKey]（字段级合并，
+   * 而非整体替换，避免主题只覆盖部分字段时丢失 key 等信息）；
+   * 若当前主题完全没有 resources 覆盖（如默认皮肤 resources: null），
+   * 则直接返回全局配置。
+   * @param {string} resourceKey 'primaryResource' | 'currency' | 'streakFreeze'
+   * @returns {object|null}
+   */
+  function getResourceConfig(resourceKey) {
+    var base = (CONFIG.resources && CONFIG.resources[resourceKey]) || null;
+    var theme = getCurrentTheme();
+    var override = theme && theme.resources && theme.resources[resourceKey];
+    if (!override) return base;
+
+    var merged = {};
+    if (base) {
+      Object.keys(base).forEach(function (k) { merged[k] = base[k]; });
+    }
+    Object.keys(override).forEach(function (k) { merged[k] = override[k]; });
+    return merged;
+  }
+
   function applyThemeVars(theme) {
     if (!theme || !theme.vars) return;
     Object.keys(theme.vars).forEach(function (k) {
@@ -78,10 +102,9 @@
       video.className = 'flame-video';
       video.autoplay = true;
       video.loop = true;
-      video.muted = true;
+      video.muted = true;   // 【保留】idle/achieved 循环视频默认静音，避免被浏览器拦截整体播放
       video.setAttribute('playsinline', '');
       video.setAttribute('webkit-playsinline', '');
-      // 默认先加载未完成状态的 MP4
       video.src = 'assets/skins/video-flame/flame-idle.mp4';
       wrap.insertBefore(video, wrap.firstChild);
     }
@@ -101,22 +124,20 @@
    * kind: 'idle'（未达标循环）| 'achieved'（已达标循环）| 'transition'（未达标→达标过渡）| 'bonus'（追加动作）
    * @param {string} kind
    */
-  function applyFlameVisualState(kind) {
+function applyFlameVisualState(kind) {
     var loop = (kind === 'idle' || kind === 'achieved');
 
-    // 一次性动画播放期间，不被常规渲染打断
     if (loop && flameVideoState.oneShotPlaying) return;
     if (flameVideoState.currentKind === kind && loop) return;
 
     var video = ensureFlameVideoEl();
     if (!video) return;
 
-    // 根据传入的状态拼接对应的 mp4 文件路径
     var targetSrc = 'assets/skins/video-flame/flame-' + kind + '.mp4';
 
     video.loop = loop;
-    
-    // 仅在视频路径发生变化时才重新加载，防止重复刷新打断播放
+    video.muted = loop;   // 【新增】循环播放（idle/achieved）静音；一次性播放（transition/bonus）带声音
+
     if (video.getAttribute('src') !== targetSrc) {
       video.src = targetSrc;
       video.load();
@@ -127,6 +148,10 @@
     if (playPromise !== undefined) {
       playPromise.catch(function (err) {
         console.warn('[Flame Video] 播放被浏览器拦截:', err);
+        if (!loop) {
+          video.muted = true;   // 【新增】带声音播放被拦截时，退回静音再试一次，保证至少画面能播
+          video.play().catch(function () {});
+        }
       });
     }
 
@@ -137,7 +162,7 @@
     if (!loop) {
       video.onended = function () {
         flameVideoState.oneShotPlaying = false;
-        applyFlameVisualState('achieved');
+        applyFlameVisualState('achieved');   // 切回 achieved 循环时，muted 会在下一次调用里被重新设为 true
       };
     }
   }
@@ -204,6 +229,8 @@
     refreshFlameAssets();
     applyFlameVisualState(StreakManager.isTodayActive() ? 'achieved' : 'idle');
 
+    renderResourceBar();   // 【新增】资源图标可能随主题变化，需要重画
+    renderTaskSidebar();   // 【新增】任务环上的资源图标同理，需要重画
     renderSkinSection();
     showToast('已切换皮肤：' + (theme.name || theme.id));
   }
@@ -395,13 +422,13 @@
   }
 
   /**
-   * 根据 config.js 中的资源图标（emoji 字符串 / 图片路径）生成可插入
-   * innerHTML 的字符串，UI 层不硬编码任何资源图标。
+   * 根据当前主题 + config.js 中的资源图标（emoji 字符串 / 图片路径）
+   * 生成可插入 innerHTML 的字符串，UI 层不硬编码任何资源图标。
    * @param {string} resourceKey 'primaryResource' | 'currency' | 'streakFreeze'
    * @returns {string}
    */
   function getResourceIconHtml(resourceKey) {
-    var res = CONFIG.resources && CONFIG.resources[resourceKey];
+    var res = getResourceConfig(resourceKey);
     if (!res) return '';
     if (CONFIG.isImageIcon && CONFIG.isImageIcon(res.icon)) {
       return '<img src="' + res.icon + '" alt="' + escapeHtml(res.name || '') +
@@ -412,7 +439,7 @@
 
   // textContent 场景不能插入 HTML 图标，退化为纯文本 emoji（图片图标场景省略图标）
   function getResourceIconPlain(resourceKey) {
-    var res = CONFIG.resources && CONFIG.resources[resourceKey];
+    var res = getResourceConfig(resourceKey);
     if (!res) return '';
     return (CONFIG.isImageIcon && CONFIG.isImageIcon(res.icon)) ? '' : (res.icon || '');
   }

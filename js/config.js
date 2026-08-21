@@ -198,92 +198,47 @@
        ≥300px 即可（显示区域本身只有约 150×180px）。
        ========================================================================== */
     /* ---- 皮肤/主题系统 ---- */
-    themes: {
-      list: [
-        {
-          id: 'default',
-          name: '默认黑金',
-          vars: {
-            '--primary-color': '#ffd700',
-            '--flame-orange': '#ff8a3d',
-            '--flame-red': '#ff3d3d',
-            '--currency-color': '#5ec8ff',
-            '--shield-color': '#38e8d0',
-            '--bg-base': '#0f0f12',
-            '--bg-elevated': '#17171d',
-            '--bg-elevated-2': '#1f1f28',
-            '--bg-elevated-3': '#292933',
-            '--text-primary': '#ffffff',
-            '--text-muted': '#a0a0ab'
-          },
-          flame: null
+    /* ---- 皮肤/主题系统 ---- */
+  themes: {
+    list: [
+      {
+        id: 'default',
+        name: '默认黑金',
+        vars: { /* ...原有 CSS 变量... */ },
+        resources: null, // 为 null 时自动使用全局默认图标（🔥 💎 🛡️）
+        flame: null
+      },
+      {
+        id: 'qiaohu-light',
+        name: '巧虎（暖白明亮）',
+        vars: {
+          '--primary-color': '#ff9800',
+          '--flame-orange': '#ffa726',
+          '--flame-red': '#ff5722',
+          '--currency-color': '#29b6f6',
+          '--shield-color': '#26a69a',
+          '--bg-base': '#f5f7fa',
+          '--bg-elevated': '#ffffff',
+          '--bg-elevated-2': '#edf2f7',
+          '--bg-elevated-3': '#e2e8f0',
+          '--text-primary': '#1a202c',
+          '--text-muted': '#718096'
         },
-        {
-          id: 'ice-blue',
-          name: '冰蓝',
-          vars: {
-            '--primary-color': '#7ee8fa',
-            '--flame-orange': '#5ec8ff',
-            '--flame-red': '#4facfe',
-            '--currency-color': '#a78bfa',
-            '--shield-color': '#34d399',
-            '--bg-base': '#0a0f1a',
-            '--bg-elevated': '#121a2b',
-            '--bg-elevated-2': '#182338',
-            '--bg-elevated-3': '#1f2c47',
-            '--text-primary': '#ffffff',
-            '--text-muted': '#8a99ad'
-          },
-          flame: null
+        /* 巧虎专属资源定制：把火力换成星星⭐，也可传入图片路径如 'assets/skins/qiaohu/star.png' */
+        resources: {
+          primaryResource: { name: '星星', icon: '⭐' },
+          currency:        { name: '爱心', icon: '❤️' },
+          streakFreeze:    { name: '巧虎饼干', icon: '🍪' }
         },
-        {
-          id: 'qiaohu-dark',
-          name: '巧虎（暗黑版）',
-          vars: {
-            '--primary-color': '#ffd700',
-            '--flame-orange': '#ff8a3d',
-            '--flame-red': '#ff3d3d',
-            '--currency-color': '#5ec8ff',
-            '--shield-color': '#38e8d0',
-            '--bg-base': '#0f0f12',
-            '--bg-elevated': '#17171d',
-            '--bg-elevated-2': '#1f1f28',
-            '--bg-elevated-3': '#292933',
-            '--text-primary': '#ffffff',
-            '--text-muted': '#a0a0ab'
-          },
-          flame: {
-            idle: 'assets/skins/video-flame/flame-idle.mp4',
-            transition: 'assets/skins/video-flame/flame-transition.mp4',
-            achieved: 'assets/skins/video-flame/flame-achieved.mp4',
-            bonus: 'assets/skins/video-flame/flame-bonus.mp4'
-          }
-        },
-        {
-          id: 'qiaohu-light',
-          name: '巧虎（暖白明亮）',
-          vars: {
-            '--primary-color': '#ff9800',     /* 巧虎暖橙 */
-            '--flame-orange': '#ffa726',
-            '--flame-red': '#ff5722',
-            '--currency-color': '#29b6f6',
-            '--shield-color': '#26a69a',
-            '--bg-base': '#f5f7fa',           /* 干净柔和的浅灰白背景 */
-            '--bg-elevated': '#ffffff',       /* 卡片纯白 */
-            '--bg-elevated-2': '#edf2f7',
-            '--bg-elevated-3': '#e2e8f0',
-            '--text-primary': '#1a202c',     /* 深色文字，保证明亮背景下的清晰度 */
-            '--text-muted': '#718096'
-          },
-          flame: {
-            idle: 'assets/skins/video-flame/flame-idle.mp4',
-            transition: 'assets/skins/video-flame/flame-transition.mp4',
-            achieved: 'assets/skins/video-flame/flame-achieved.mp4',
-            bonus: 'assets/skins/video-flame/flame-bonus.mp4'
-          }
+        flame: {
+          idle: 'assets/skins/video-flame/flame-idle.mp4',
+          transition: 'assets/skins/video-flame/flame-transition.mp4',
+          achieved: 'assets/skins/video-flame/flame-achieved.mp4',
+          bonus: 'assets/skins/video-flame/flame-bonus.mp4'
         }
-      ]
-    }
+      }
+    ]
+  }
   };
 
   // 挂载到全局，供其余脚本（无模块打包器，按顺序以 <script> 标签加载）使用

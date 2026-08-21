@@ -197,12 +197,12 @@
        是"浮在深色背景上"而不是一块方形贴图。分辨率建议正方形、边长
        ≥300px 即可（显示区域本身只有约 150×180px）。
        ========================================================================== */
+    /* ---- 皮肤/主题系统 ---- */
     themes: {
       list: [
         {
           id: 'default',
           name: '默认黑金',
-          // 对应 style.css 里 :root 的原始默认值，逐条列出方便切换回来时对照
           vars: {
             '--primary-color': '#ffd700',
             '--flame-orange': '#ff8a3d',
@@ -212,14 +212,15 @@
             '--bg-base': '#0f0f12',
             '--bg-elevated': '#17171d',
             '--bg-elevated-2': '#1f1f28',
-            '--bg-elevated-3': '#292933'
+            '--bg-elevated-3': '#292933',
+            '--text-primary': '#ffffff',
+            '--text-muted': '#a0a0ab'
           },
-          flame: null // 未提供视频素材，中间沿用原有 SVG 火苗动画
+          flame: null
         },
         {
           id: 'ice-blue',
           name: '冰蓝',
-          // 纯 CSS 换色示例：不需要任何视频素材也能切皮肤，验证配色系统本身工作正常
           vars: {
             '--primary-color': '#7ee8fa',
             '--flame-orange': '#5ec8ff',
@@ -229,17 +230,15 @@
             '--bg-base': '#0a0f1a',
             '--bg-elevated': '#121a2b',
             '--bg-elevated-2': '#182338',
-            '--bg-elevated-3': '#1f2c47'
+            '--bg-elevated-3': '#1f2c47',
+            '--text-primary': '#ffffff',
+            '--text-muted': '#8a99ad'
           },
           flame: null
         },
         {
-          id: 'video-flame',
-          name: '实拍火苗（视频）',
-          // 配色沿用默认黑金，主要区别是中间火苗换成用户提供的视频素材；
-          // 素材尚未放入 assets/skins/video-flame/ 目录前，选中此皮肤会
-          // 自动回退显示 SVG 火苗（因为 <video> 加载 404 时 ui.js 不会崩溃，
-          // 只是画面显示不出来），补齐文件后无需改代码即可生效。
+          id: 'qiaohu-dark',
+          name: '巧虎（暗黑版）',
           vars: {
             '--primary-color': '#ffd700',
             '--flame-orange': '#ff8a3d',
@@ -249,7 +248,32 @@
             '--bg-base': '#0f0f12',
             '--bg-elevated': '#17171d',
             '--bg-elevated-2': '#1f1f28',
-            '--bg-elevated-3': '#292933'
+            '--bg-elevated-3': '#292933',
+            '--text-primary': '#ffffff',
+            '--text-muted': '#a0a0ab'
+          },
+          flame: {
+            idle: 'assets/skins/video-flame/flame-idle.mp4',
+            transition: 'assets/skins/video-flame/flame-transition.mp4',
+            achieved: 'assets/skins/video-flame/flame-achieved.mp4',
+            bonus: 'assets/skins/video-flame/flame-bonus.mp4'
+          }
+        },
+        {
+          id: 'qiaohu-light',
+          name: '巧虎（暖白明亮）',
+          vars: {
+            '--primary-color': '#ff9800',     /* 巧虎暖橙 */
+            '--flame-orange': '#ffa726',
+            '--flame-red': '#ff5722',
+            '--currency-color': '#29b6f6',
+            '--shield-color': '#26a69a',
+            '--bg-base': '#f5f7fa',           /* 干净柔和的浅灰白背景 */
+            '--bg-elevated': '#ffffff',       /* 卡片纯白 */
+            '--bg-elevated-2': '#edf2f7',
+            '--bg-elevated-3': '#e2e8f0',
+            '--text-primary': '#1a202c',     /* 深色文字，保证明亮背景下的清晰度 */
+            '--text-muted': '#718096'
           },
           flame: {
             idle: 'assets/skins/video-flame/flame-idle.mp4',

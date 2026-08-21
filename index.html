@@ -54,17 +54,12 @@
 
         <div class="flame-glow" aria-hidden="true"></div>
 
-        <svg class="flame-svg" id="flameSvg" viewBox="0 0 200 240" aria-hidden="true">
-          <defs>
-            <linearGradient id="flameGradient" x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stop-color="var(--flame-red)"/>
-              <stop offset="55%" stop-color="var(--flame-orange)"/>
-              <stop offset="100%" stop-color="var(--primary-color)"/>
-            </linearGradient>
-          </defs>
-          <path class="flame-path" fill="url(#flameGradient)"
-            d="M100 8C70 46 46 78 46 120c0 40 24 74 54 90 30-16 54-50 54-90 0-22-10-42-22-58 2 20-6 34-18 40 8-22 2-46-14-94z"/>
-        </svg>
+        <!-- 巧虎视频播放容器 -->
+        <div class="flame-video-container">
+          <video id="flameVideo" class="flame-video" autoplay loop muted playsinline>
+            <source id="flameVideoSource" src="assets/skins/video-flame/flame-idle.mp4" type="video/mp4">
+          </video>
+        </div>
 
         <div class="flame-count-wrap">
           <span class="flame-count" id="streakCount">0</span>

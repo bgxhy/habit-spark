@@ -62,6 +62,12 @@
     applyThemeVars(getCurrentTheme());
   }
 
+  
+
+/* ------------------------------------------------------------------ *
+   * 【修复版】皮肤/主题系统 + 火苗视频状态机
+   * ------------------------------------------------------------------ */
+
   function ensureFlameVideoEl() {
     var wrap = $('flameWrap');
     if (!wrap) return null;
@@ -70,53 +76,60 @@
       video = document.createElement('video');
       video.id = 'flameVideo';
       video.className = 'flame-video';
+      video.autoplay = true;
+      video.loop = true;
       video.muted = true;
       video.setAttribute('playsinline', '');
       video.setAttribute('webkit-playsinline', '');
+      // 默认先加载未完成状态的 MP4
+      video.src = 'assets/skins/video-flame/flame-idle.mp4';
       wrap.insertBefore(video, wrap.firstChild);
     }
     return video;
   }
 
-  /** 根据当前皮肤是否配置了火苗视频，决定显示 <video> 还是回退显示原 SVG 火苗。 */
+  /** 强制显示视频，隐藏旧版 SVG 火苗。 */
   function refreshFlameAssets() {
     var svg = document.querySelector('#flameStage .flame-svg') || document.querySelector('.flame-svg');
-    var assets = getCurrentTheme() && getCurrentTheme().flame;
-    var video = $('flameVideo');
-    if (assets) {
-      if (svg) svg.style.display = 'none';
-      if (video) video.style.display = '';
-    } else {
-      if (svg) svg.style.display = '';
-      if (video) video.style.display = 'none';
-    }
+    var video = ensureFlameVideoEl();
+    if (svg) svg.style.display = 'none';
+    if (video) video.style.display = 'block';
   }
 
   /**
-   * 切换火苗视觉状态。kind: 'idle'（未达标循环）| 'achieved'（已达标循环，
-   * loop） | 'transition'（未达标→达标过渡，一次性）| 'bonus'（已达标状态下
-   * 又完成任务的追加动作，一次性）。一次性素材播完后自动回落到 'achieved' 循环。
-   * 当前皮肤未配置视频素材时静默跳过（沿用原 SVG 动画，不受影响）。
+   * 切换火苗视频状态。
+   * kind: 'idle'（未达标循环）| 'achieved'（已达标循环）| 'transition'（未达标→达标过渡）| 'bonus'（追加动作）
    * @param {string} kind
    */
   function applyFlameVisualState(kind) {
-    var theme = getCurrentTheme();
-    var assets = theme && theme.flame;
-    if (!assets) return;
-
     var loop = (kind === 'idle' || kind === 'achieved');
 
-    // 一次性过渡/追加动作动画播放期间，不被常规渲染的"基线循环"打断
+    // 一次性动画播放期间，不被常规渲染打断
     if (loop && flameVideoState.oneShotPlaying) return;
     if (flameVideoState.currentKind === kind && loop) return;
 
     var video = ensureFlameVideoEl();
-    if (!video || !assets[kind]) return;
+    if (!video) return;
+
+    // 根据传入的状态拼接对应的 mp4 文件路径
+    var targetSrc = 'assets/skins/video-flame/flame-' + kind + '.mp4';
 
     video.loop = loop;
-    video.src = assets[kind];
+    
+    // 仅在视频路径发生变化时才重新加载，防止重复刷新打断播放
+    if (video.getAttribute('src') !== targetSrc) {
+      video.src = targetSrc;
+      video.load();
+    }
+
     video.currentTime = 0;
-    video.play().catch(function () {});
+    var playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(function (err) {
+        console.warn('[Flame Video] 播放被浏览器拦截:', err);
+      });
+    }
+
     flameVideoState.currentKind = kind;
     flameVideoState.oneShotPlaying = !loop;
 

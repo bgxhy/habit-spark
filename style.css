@@ -829,3 +829,25 @@ h1, h2, h3, p { margin: 0; }
   .tab-panel { left: 50%; right: auto; width: 480px; transform: translate(-50%, 100%); }
   .tab-panel.open { transform: translate(-50%, 0); }
 }
+/* ==========================================================================
+   视频火焰/皮肤 样式适配
+   ========================================================================== */
+
+.flame-video-container {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.flame-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  pointer-events: none;
+}

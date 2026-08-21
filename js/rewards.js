@@ -88,7 +88,7 @@
    *        每日礼包 / 商店购买 / 兑换等场景调用方须显式传 false。
    * @returns {{primaryResource:number, currency:number, doubled:boolean}}
    */
-  function calculateTotalReward(task, options) {
+    function calculateTotalReward(task, options) {
     options = options || {};
     var allowDouble = options.allowDouble !== false;
 
@@ -97,7 +97,14 @@
     var streakBonus = calculateStreakBonus();
     var achievementBonus = calculateAchievementBonus();
 
-    var primaryResource = base.primaryResource * bonus.multiplier
+    // 周期达标连续加成：task.bonusActive 由 tasks.js 的 syncPeriodBonus 维护，
+    // 与随机双倍是相乘关系（都触发时 1.5 × 2 = 3 倍），只影响主资源，不影响货币
+    var periodBonusActive = !!(task && task.bonusActive);
+    var periodBonusMultiplier = periodBonusActive
+      ? ((CONFIG.rewards && CONFIG.rewards.periodBonusMultiplier) || 1)
+      : 1;
+
+    var primaryResource = base.primaryResource * bonus.multiplier * periodBonusMultiplier
       + streakBonus.primaryResource
       + achievementBonus.primaryResource;
 
@@ -108,7 +115,8 @@
     return {
       primaryResource: primaryResource,
       currency: currency,
-      doubled: bonus.triggered
+      doubled: bonus.triggered,
+      bonusApplied: periodBonusActive // 供 ui.js 显示"✨加成中"
     };
   }
 
@@ -190,7 +198,9 @@
     }
 
     var giftConfig = CONFIG.dailyGift || {};
-    var primaryResource = giftConfig.primaryResourceReward || 0;
+    var min = typeof giftConfig.primaryResourceMin === 'number' ? giftConfig.primaryResourceMin : 1;
+    var max = typeof giftConfig.primaryResourceMax === 'number' ? giftConfig.primaryResourceMax : min;
+    var primaryResource = min + Math.floor(Math.random() * (max - min + 1));
     var currency = giftConfig.currencyReward || 0;
 
     DataStore.mutate(function (s) {

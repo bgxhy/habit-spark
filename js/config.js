@@ -55,9 +55,13 @@
       monthly: { baseResourceReward: 100, currencyReward: 5, targetCount: 1 }
     },
 
-    /* ---- 每日免费礼包（见需求文档第八节） ---- */
+    /* ---- 每日免费礼包（见需求文档第八节）
+       【改动】固定值改为随机区间：每天领取时在 [primaryResourceMin, primaryResourceMax]
+       闭区间内取一个随机整数，由 rewards.js 的 claimDailyGift() 用
+       Math.floor(Math.random() * (max - min + 1)) + min 计算。 ---- */
     dailyGift: {
-      primaryResourceReward: 10,
+      primaryResourceMin: 1,
+      primaryResourceMax: 3,
       currencyReward: 0
     },
 
@@ -65,7 +69,17 @@
     rewards: {
       randomDoubleChance: 0.2,      // 随机双倍概率，仅对任务主资源生效
       streakBonusEnabled: false,    // 预留：连胜加成算子，暂不实现
-      achievementBonusEnabled: false // 预留：成就加成算子，暂不实现
+      achievementBonusEnabled: false, // 预留：成就加成算子，暂不实现
+
+      /* 【新增】周期任务达标连续加成（见 2026-08-21 需求变更）：
+         weekly/monthly 任务在某个周期内达到 targetCount 后，进入"加成状态"
+         （task.bonusActive = true），该状态会一直持续到某个周期结算时
+         发现未达标为止（由 tasks.js 在每次跨周期时逐任务检查上一周期是否
+         达标来维护这个开关，本文件只提供倍率数值）。
+         叠加规则：periodBonus 与 randomDoubleChance 的双倍是【相乘】关系
+         （例如加成期间又触发双倍：1.5 × 2 = 3 倍），只作用于任务主资源，
+         不影响货币奖励——与随机双倍的既有规则保持一致。 */
+      periodBonusMultiplier: 1.5
     },
 
     /* ---- 连胜与保护卡（见需求文档第六节） ---- */
@@ -152,10 +166,99 @@
     /* ---- 数据版本与扩展接口（见需求文档第十五节） ---- */
     dataVersion: 1,
 
-    /* ---- 主题/多分身扩展预留：替换本对象即可切换全局文案与图标 ---- */
-    theme: {
-      id: 'default',
-      primaryColorVar: '--primary-color'
+    /* ==========================================================================
+       【新增】皮肤/主题系统（见 2026-08-21 需求变更）
+
+       每套皮肤 = 一组 CSS 变量（覆盖 style.css 里 :root 定义的颜色变量，
+       切换时由 ui.js 用 document.documentElement.style.setProperty() 逐个
+       写入）+ 一组可选的火苗视频素材（不配置则自动回退到原来的 SVG 火苗
+       动画，不会报错也不会白屏）。
+
+       ------------------------------------------------------------------
+       火苗视频素材命名与路径约定（放在仓库根目录的 assets/skins/<皮肤id>/ 下）：
+
+         assets/skins/<皮肤id>/flame-idle.mp4        今日尚未打卡时的循环视频
+         assets/skins/<皮肤id>/flame-transition.mp4  未达标→达标那一刻播放一次的过渡动画
+         assets/skins/<皮肤id>/flame-achieved.mp4     今日已达标后的循环视频
+         assets/skins/<皮肤id>/flame-bonus.mp4        已达标状态下又完成任务时播放一次的追加动作
+
+       其中 flame-idle / flame-achieved 会循环播放（loop=true）；
+       flame-transition / flame-bonus 只播一次，播完后 ui.js 会自动切回
+       flame-achieved 循环，不需要额外配置。
+
+       四个文件不要求全部提供：某皮肤的 flame 字段整体留空（或设为 null）
+       时，该皮肤就是纯 CSS 换色，中间还是原来的 SVG 火苗动画。若只想做
+       "追加动作"这一项，也可以只在 flame 里写 bonus 一个字段，其余留空，
+       ui.js 对每个 kind 都是按需查找，缺失的 kind 不会报错、只是不生效。
+
+       格式建议：优先用 MP4（H.264），兼容性最好；由于 <video> 标签不支持
+       透明通道，如果素材本身背景不透明，建议把背景做成与 App 背景色一致
+       的纯色 #0f0f12（或该皮肤自己的 --bg-base 颜色），这样视觉上才能像
+       是"浮在深色背景上"而不是一块方形贴图。分辨率建议正方形、边长
+       ≥300px 即可（显示区域本身只有约 150×180px）。
+       ========================================================================== */
+    themes: {
+      list: [
+        {
+          id: 'default',
+          name: '默认黑金',
+          // 对应 style.css 里 :root 的原始默认值，逐条列出方便切换回来时对照
+          vars: {
+            '--primary-color': '#ffd700',
+            '--flame-orange': '#ff8a3d',
+            '--flame-red': '#ff3d3d',
+            '--currency-color': '#5ec8ff',
+            '--shield-color': '#38e8d0',
+            '--bg-base': '#0f0f12',
+            '--bg-elevated': '#17171d',
+            '--bg-elevated-2': '#1f1f28',
+            '--bg-elevated-3': '#292933'
+          },
+          flame: null // 未提供视频素材，中间沿用原有 SVG 火苗动画
+        },
+        {
+          id: 'ice-blue',
+          name: '冰蓝',
+          // 纯 CSS 换色示例：不需要任何视频素材也能切皮肤，验证配色系统本身工作正常
+          vars: {
+            '--primary-color': '#7ee8fa',
+            '--flame-orange': '#5ec8ff',
+            '--flame-red': '#4facfe',
+            '--currency-color': '#a78bfa',
+            '--shield-color': '#34d399',
+            '--bg-base': '#0a0f1a',
+            '--bg-elevated': '#121a2b',
+            '--bg-elevated-2': '#182338',
+            '--bg-elevated-3': '#1f2c47'
+          },
+          flame: null
+        },
+        {
+          id: 'video-flame',
+          name: '实拍火苗（视频）',
+          // 配色沿用默认黑金，主要区别是中间火苗换成用户提供的视频素材；
+          // 素材尚未放入 assets/skins/video-flame/ 目录前，选中此皮肤会
+          // 自动回退显示 SVG 火苗（因为 <video> 加载 404 时 ui.js 不会崩溃，
+          // 只是画面显示不出来），补齐文件后无需改代码即可生效。
+          vars: {
+            '--primary-color': '#ffd700',
+            '--flame-orange': '#ff8a3d',
+            '--flame-red': '#ff3d3d',
+            '--currency-color': '#5ec8ff',
+            '--shield-color': '#38e8d0',
+            '--bg-base': '#0f0f12',
+            '--bg-elevated': '#17171d',
+            '--bg-elevated-2': '#1f1f28',
+            '--bg-elevated-3': '#292933'
+          },
+          flame: {
+            idle: 'assets/skins/video-flame/flame-idle.mp4',
+            transition: 'assets/skins/video-flame/flame-transition.mp4',
+            achieved: 'assets/skins/video-flame/flame-achieved.mp4',
+            bonus: 'assets/skins/video-flame/flame-bonus.mp4'
+          }
+        }
+      ]
     }
   };
 

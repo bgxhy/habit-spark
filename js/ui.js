@@ -31,6 +31,337 @@
   var CHARGE_DURATION_MS = 1000; // 须与 style.css 中 --duration-charge 保持一致
 
   /* ------------------------------------------------------------------ *
+   * 【新增】皮肤/主题系统 + 火苗视频状态机
+   * ------------------------------------------------------------------ */
+
+  var flameVideoState = { currentKind: null, oneShotPlaying: false };
+
+  function getThemeById(id) {
+    var list = (CONFIG.themes && CONFIG.themes.list) || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) return list[i];
+    }
+    return list[0] || null;
+  }
+
+  function getCurrentTheme() {
+    var state = DataStore.getState();
+    var themeId = (state.settings && state.settings.theme) || 'default';
+    return getThemeById(themeId);
+  }
+
+  function applyThemeVars(theme) {
+    if (!theme || !theme.vars) return;
+    Object.keys(theme.vars).forEach(function (k) {
+      document.documentElement.style.setProperty(k, theme.vars[k]);
+    });
+  }
+
+  /** 应用启动时读取已保存的皮肤并应用配色变量（不涉及火苗视频，视频由 renderFlame 首次渲染时接管）。 */
+  function applySavedThemeOnBoot() {
+    applyThemeVars(getCurrentTheme());
+  }
+
+  function ensureFlameVideoEl() {
+    var wrap = $('flameWrap');
+    if (!wrap) return null;
+    var video = $('flameVideo');
+    if (!video) {
+      video = document.createElement('video');
+      video.id = 'flameVideo';
+      video.className = 'flame-video';
+      video.muted = true;
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      wrap.insertBefore(video, wrap.firstChild);
+    }
+    return video;
+  }
+
+  /** 根据当前皮肤是否配置了火苗视频，决定显示 <video> 还是回退显示原 SVG 火苗。 */
+  function refreshFlameAssets() {
+    var svg = document.querySelector('#flameStage .flame-svg') || document.querySelector('.flame-svg');
+    var assets = getCurrentTheme() && getCurrentTheme().flame;
+    var video = $('flameVideo');
+    if (assets) {
+      if (svg) svg.style.display = 'none';
+      if (video) video.style.display = '';
+    } else {
+      if (svg) svg.style.display = '';
+      if (video) video.style.display = 'none';
+    }
+  }
+
+  /**
+   * 切换火苗视觉状态。kind: 'idle'（未达标循环）| 'achieved'（已达标循环，
+   * loop） | 'transition'（未达标→达标过渡，一次性）| 'bonus'（已达标状态下
+   * 又完成任务的追加动作，一次性）。一次性素材播完后自动回落到 'achieved' 循环。
+   * 当前皮肤未配置视频素材时静默跳过（沿用原 SVG 动画，不受影响）。
+   * @param {string} kind
+   */
+  function applyFlameVisualState(kind) {
+    var theme = getCurrentTheme();
+    var assets = theme && theme.flame;
+    if (!assets) return;
+
+    var loop = (kind === 'idle' || kind === 'achieved');
+
+    // 一次性过渡/追加动作动画播放期间，不被常规渲染的"基线循环"打断
+    if (loop && flameVideoState.oneShotPlaying) return;
+    if (flameVideoState.currentKind === kind && loop) return;
+
+    var video = ensureFlameVideoEl();
+    if (!video || !assets[kind]) return;
+
+    video.loop = loop;
+    video.src = assets[kind];
+    video.currentTime = 0;
+    video.play().catch(function () {});
+    flameVideoState.currentKind = kind;
+    flameVideoState.oneShotPlaying = !loop;
+
+    video.onended = null;
+    if (!loop) {
+      video.onended = function () {
+        flameVideoState.oneShotPlaying = false;
+        applyFlameVisualState('achieved');
+      };
+    }
+  }
+
+  function ensureSkinSection() {
+    var panelContent = document.querySelector('.tab-panel[data-panel="settings"] .panel-content')
+      || document.querySelector('[data-panel="settings"]');
+    if (!panelContent) return null;
+    var section = $('skinSection');
+    if (!section) {
+      section = document.createElement('div');
+      section.id = 'skinSection';
+      section.className = 'settings-card';
+      panelContent.appendChild(section);
+    }
+    return section;
+  }
+
+  function renderSkinSection() {
+    var section = ensureSkinSection();
+    if (!section) return;
+    var list = (CONFIG.themes && CONFIG.themes.list) || [];
+    var currentId = (DataStore.getState().settings || {}).theme || 'default';
+
+    section.innerHTML = '<div style="font-weight:700;margin-bottom:10px;">界面皮肤</div>';
+    if (list.length === 0) {
+      var hint = document.createElement('div');
+      hint.style.fontSize = '12px';
+      hint.style.color = 'var(--text-muted)';
+      hint.textContent = '暂无可用皮肤';
+      section.appendChild(hint);
+      return;
+    }
+
+    var row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.flexWrap = 'wrap';
+    row.style.gap = '10px';
+
+    list.forEach(function (theme) {
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'btn btn--ghost skin-card' + (theme.id === currentId ? ' skin-card--active' : '');
+      var dotColor = (theme.vars && theme.vars['--primary-color']) || '#ffd700';
+      card.innerHTML =
+        '<span class="skin-card__dot" style="background:' + dotColor + ';"></span>' +
+        '<span>' + escapeHtml(theme.name || theme.id) + '</span>';
+      card.addEventListener('click', function () { applyTheme(theme.id); });
+      row.appendChild(card);
+    });
+
+    section.appendChild(row);
+  }
+
+  function applyTheme(themeId) {
+    var theme = getThemeById(themeId);
+    if (!theme) return;
+
+    applyThemeVars(theme);
+    DataStore.mutate(function (s) { s.settings.theme = theme.id; });
+
+    flameVideoState.currentKind = null;
+    flameVideoState.oneShotPlaying = false;
+    refreshFlameAssets();
+    applyFlameVisualState(StreakManager.isTodayActive() ? 'achieved' : 'idle');
+
+    renderSkinSection();
+    showToast('已切换皮肤：' + (theme.name || theme.id));
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 【新增】满屏烟花 / 暴击火箭特效（Canvas 实现，不依赖任何图片素材）
+   * ------------------------------------------------------------------ */
+
+  var FIREWORK_COLORS = ['#ffd700', '#ff8a3d', '#ff3d3d', '#5ec8ff', '#38e8d0', '#ffffff'];
+
+  var fireworksState = {
+    particles: [],
+    rockets: [],
+    running: false,
+    expireAt: 0,
+    canvas: null,
+    ctx: null
+  };
+
+  function ensureFireworksCanvas() {
+    if (fireworksState.canvas) {
+      resizeFireworksCanvas();
+      return fireworksState.canvas;
+    }
+    var canvas = document.createElement('canvas');
+    canvas.id = 'fireworksCanvas';
+    canvas.style.position = 'fixed';
+    canvas.style.inset = '0';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '80';
+    document.body.appendChild(canvas);
+    fireworksState.canvas = canvas;
+    fireworksState.ctx = canvas.getContext('2d');
+    resizeFireworksCanvas();
+    window.addEventListener('resize', resizeFireworksCanvas);
+    return canvas;
+  }
+
+  function resizeFireworksCanvas() {
+    var canvas = fireworksState.canvas;
+    if (!canvas) return;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+
+  function spawnBurst(x, y, count, big) {
+    for (var i = 0; i < count; i++) {
+      var angle = (Math.PI * 2 * i) / count + Math.random() * 0.3;
+      var speed = (big ? 2.5 : 1.6) + Math.random() * (big ? 3.5 : 2.2);
+      fireworksState.particles.push({
+        x: x, y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0,
+        maxLife: (big ? 70 : 50) + Math.random() * 20,
+        color: FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)],
+        size: big ? (2 + Math.random() * 2) : (1.5 + Math.random() * 1.5)
+      });
+    }
+  }
+
+  function launchRocket(canvas) {
+    var startX = canvas.width * (0.4 + Math.random() * 0.2);
+    fireworksState.rockets.push({
+      x: startX,
+      y: canvas.height + 10,
+      vx: (Math.random() - 0.5) * 1.2,
+      vy: -(9 + Math.random() * 2),
+      life: 0,
+      maxLife: 60
+    });
+  }
+
+  function fireworksTick() {
+    var ctx = fireworksState.ctx;
+    var canvas = fireworksState.canvas;
+    if (!ctx || !canvas) { fireworksState.running = false; return; }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    fireworksState.rockets = fireworksState.rockets.filter(function (r) {
+      r.x += r.vx; r.y += r.vy; r.vy += 0.12; r.life += 1;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (r.vy >= -1 || r.life > r.maxLife) {
+        spawnBurst(r.x, r.y, 90, true);
+        return false;
+      }
+      return true;
+    });
+
+    fireworksState.particles = fireworksState.particles.filter(function (p) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.life += 1;
+      var t = p.life / p.maxLife;
+      if (t >= 1) return false;
+      ctx.globalAlpha = Math.max(0, 1 - t);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      return true;
+    });
+    ctx.globalAlpha = 1;
+
+    var stillActive = fireworksState.particles.length > 0 || fireworksState.rockets.length > 0;
+    if (stillActive || performance.now() < fireworksState.expireAt) {
+      requestAnimationFrame(fireworksTick);
+    } else {
+      fireworksState.running = false;
+    }
+  }
+
+  function ensureFireworksLoopRunning() {
+    if (fireworksState.running) return;
+    fireworksState.running = true;
+    requestAnimationFrame(fireworksTick);
+  }
+
+  /**
+   * 触发满屏烟花特效。普通完成放 3 波小烟花（约1.3秒）；
+   * 暴击（随机双倍）放 6 波大烟花（约2.6秒）+ 一枚从底部升空爆炸的火箭。
+   * @param {{crit?: boolean}} [options]
+   */
+  function triggerFireworks(options) {
+    options = options || {};
+    var crit = !!options.crit;
+    var canvas = ensureFireworksCanvas();
+    var burstCount = crit ? 6 : 3;
+    var duration = crit ? 2600 : 1300;
+
+    for (var i = 0; i < burstCount; i++) {
+      (function (delay) {
+        setTimeout(function () {
+          var x = canvas.width * (0.2 + Math.random() * 0.6);
+          var y = canvas.height * (0.2 + Math.random() * 0.4);
+          spawnBurst(x, y, crit ? 70 : 40, crit);
+        }, delay);
+      })(i * (crit ? 260 : 220));
+    }
+
+    if (crit) {
+      setTimeout(function () { launchRocket(canvas); }, 150);
+    }
+
+    ensureFireworksLoopRunning();
+    fireworksState.expireAt = Math.max(fireworksState.expireAt, performance.now() + duration);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 【新增】动态补充样式（皮肤卡片 / 火苗视频 / 加成星标）
+   * ------------------------------------------------------------------ */
+
+  function injectDynamicStylesV2() {
+    if ($('ui-dynamic-styles-v2')) return;
+    var style = document.createElement('style');
+    style.id = 'ui-dynamic-styles-v2';
+    style.textContent = [
+      '.flame-video{width:150px;height:180px;object-fit:cover;border-radius:16px;display:none;}',
+      '.skin-card{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;}',
+      '.skin-card__dot{width:14px;height:14px;border-radius:50%;display:inline-block;box-shadow:0 0 0 2px rgba(255,255,255,0.15) inset;}',
+      '.skin-card--active{border-color:var(--primary-color);box-shadow:0 0 0 1px var(--primary-color) inset;}',
+      '.task-ring__bonus-badge{position:absolute;top:-4px;left:-4px;font-size:12px;filter:drop-shadow(0 0 4px rgba(255,215,0,0.8));}'
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
+  /* ------------------------------------------------------------------ *
    * 基础工具
    * ------------------------------------------------------------------ */
 
@@ -312,20 +643,32 @@
     }
 
     var flameEl = $('flameWrap');
+    var bonusTag = result.reward.bonusApplied ? ' ✨加成中' : ''; // bonusApplied 由 rewards.js 提供，暂未接入时静默忽略
     var rewardText = '+' + result.reward.primaryResource + ' ' + getResourceIconPlain('primaryResource') +
-      (result.reward.doubled ? ' 双倍！' : '');
+      (result.reward.doubled ? ' 双倍！' : '') + bonusTag;
     spawnFloatingText(flameEl, rewardText);
-    spawnParticles(10);
+
+    // 满屏烟花特效：普通完成放小烟花，暴击（随机双倍）放更长时间的大烟花+火箭
+    triggerFireworks({ crit: !!result.reward.doubled });
 
     if (result.periodComplete && (result.task.type === 'weekly' || result.task.type === 'monthly')) {
       showToast('「' + result.task.name + '」本周期已完成！');
+    }
+
+    var nowActive = StreakManager.isTodayActive();
+
+    // 火苗视频状态机：刚从未达标切到达标 → 播过渡动画；已达标状态下又完成任务 → 播追加动作
+    // 必须在 renderFlame() 之前调用，renderFlame 的基线渲染才不会打断这段一次性动画
+    if (!wasActiveBefore && nowActive) {
+      applyFlameVisualState('transition');
+    } else if (wasActiveBefore && nowActive) {
+      applyFlameVisualState('bonus');
     }
 
     renderResourceBar();
     renderTaskSidebar();
     renderFlame();
 
-    var nowActive = StreakManager.isTodayActive();
     if (!wasActiveBefore && nowActive) {
       playStreakFanfare();
     }
@@ -400,7 +743,11 @@
   function renderTaskSidebar() {
     var listEl = $('taskList');
     var emptyEl = $('taskListEmpty');
-    var tasks = TaskManager.listTasks({ enabledOnly: true });
+    // 一次性任务完成后直接从任务栏移除（不再置灰保留）；daily/weekly/monthly
+    // 任务保留原有"完成后置灰"的展示方式，因为它们会在下个周期重新可打卡
+    var tasks = TaskManager.listTasks({ enabledOnly: true }).filter(function (t) {
+      return !(t.type === 'once' && TaskManager.getTotalCompletions(t) > 0);
+    });
     var todayKey = DataStore.todayKey();
 
     Array.prototype.slice.call(listEl.querySelectorAll('.task-item')).forEach(function (n) { n.remove(); });
@@ -413,6 +760,8 @@
 
     tasks.forEach(function (task) {
       var done = TaskManager.isTaskDoneForPeriod(task, todayKey);
+      // task.bonusActive 由 tasks.js 的周期达标加成逻辑维护，字段不存在时星标不显示
+      var bonusBadgeHtml = task.bonusActive ? '<span class="task-ring__bonus-badge">⭐</span>' : '';
 
       var item = document.createElement('div');
       item.className = 'task-item' + (done ? ' task-item--done' : '');
@@ -425,7 +774,8 @@
         '<circle class="task-ring__track" cx="28" cy="28" r="24"></circle>' +
         '<circle class="task-ring__progress" cx="28" cy="28" r="24"></circle>' +
         '</svg>' +
-        '<span class="task-ring__icon">' + getResourceIconHtml('primaryResource') + '</span>';
+        '<span class="task-ring__icon">' + getResourceIconHtml('primaryResource') + '</span>' +
+        bonusBadgeHtml;
 
       var label = document.createElement('div');
       label.className = 'task-item__label';
@@ -452,6 +802,11 @@
     stage.classList.toggle('is-achieved', todayActive);
     stage.classList.toggle('is-inactive', !todayActive);
     $('streakBadge').classList.toggle('hidden', todayActive);
+
+    // 火苗视频基线状态：只请求 idle/achieved 循环，不会打断正在播放的
+    // 一次性过渡/追加动作动画（见 applyFlameVisualState 内部保护逻辑）
+    refreshFlameAssets();
+    applyFlameVisualState(todayActive ? 'achieved' : 'idle');
 
     renderDailyGiftButton();
   }
@@ -862,6 +1217,7 @@
     $('webhookUrlInput').value = reminder.webhookUrl || '';
     $('reminderTimeInput').value = reminder.time || '22:30';
     $('dataVersionLabel').textContent = DataStore.DATA_VERSION;
+    renderSkinSection();
   }
 
   function bindSettingsEvents() {
@@ -1003,6 +1359,8 @@
   }
 
   function init() {
+    injectDynamicStylesV2();
+    applySavedThemeOnBoot(); // 先应用已保存的皮肤配色，避免首帧闪一下默认配色
     bindBottomNav();
     bindShopStaticEvents();
     bindSettingsEvents();
@@ -1018,6 +1376,7 @@
   global.UI = {
     init: init,
     render: renderAll,
+    renderAll: renderAll, // 别名：兼容 app.js 中可能调用的 UI.renderAll()
     showToast: showToast,
     showConfirm: showConfirm
   };

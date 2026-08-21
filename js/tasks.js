@@ -81,6 +81,23 @@
   }
 
   /**
+   * 【新增】计算某个自然周期（周期起始日 periodStartKey）之后的下一个周期
+   * 起始日。仅支持 weekly/monthly（daily/once 无跨周期加成概念）。
+   * @param {'weekly'|'monthly'} type
+   * @param {string} periodStartKey 当前周期的起始日期（weekly=周一，monthly=1号）
+   * @returns {string|null}
+   */
+  function getNextPeriodStartKey(type, periodStartKey) {
+    if (type === 'weekly') return addDays(periodStartKey, 7);
+    if (type === 'monthly') {
+      var d = parseDateKey(periodStartKey);
+      var next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      return DataStore.formatDateKey(next);
+    }
+    return null;
+  }
+
+  /**
    * 获取指定任务类型在 dateStr 所在自然周期的日期区间（含首尾）。
    * once 类型无周期概念，返回 { start: null, end: null } 表示统计全部历史。
    * @param {'once'|'daily'|'weekly'|'monthly'} type
@@ -169,6 +186,81 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * 【新增】周期达标连续加成（见 2026-08-21 需求变更）
+   *
+   * 规则：weekly/monthly 任务每完整经过一个自然周期，就检查"刚结束的
+   * 那个周期"是否达到 targetCount：达到 → task.bonusActive = true（该
+   * 周期起的奖励按 CONFIG.rewards.periodBonusMultiplier 加成，由
+   * rewards.js 消费这个字段）；没达到 → task.bonusActive = false。
+   * 也就是说加成状态每个周期都会按"刚结束那个周期的表现"重新判定一次，
+   * 连续达标就一直持续下去，某个周期一旦掉链子立刻关闭——这正是
+   * "长期生效，直到有一个周期内没有达成频次的要求"的字面实现。
+   *
+   * task.bonusCheckedPeriod 记录"已经评估到哪个周期"的游标（存的是该
+   * 周期的起始日期），避免同一周期内重复判定；任务刚创建、还没有完整
+   * 经历过一个周期时，不做加成判定（没有"上一周期"可评估）。
+   * ------------------------------------------------------------------ */
+
+  /**
+   * 按需推进单个任务的周期加成状态到"当前周期"。就地修改传入的 task 对象，
+   * 不做持久化（由调用方统一决定何时落盘），返回是否发生了变化。
+   * @param {object} task
+   * @param {string} dateStr 当前日期，默认今天
+   * @returns {boolean} 本次调用是否修改了 task 的加成相关字段
+   */
+  function syncPeriodBonus(task, dateStr) {
+    if (task.type !== 'weekly' && task.type !== 'monthly') return false;
+    dateStr = dateStr || DataStore.todayKey();
+
+    var currentPeriodStart = getPeriodRange(task.type, dateStr).start;
+    if (task.bonusCheckedPeriod === currentPeriodStart) return false; // 本周期已评估过
+
+    var beforeActive = !!task.bonusActive;
+    var beforeChecked = task.bonusCheckedPeriod || null;
+
+    // 任务刚创建、还没有完整经历过一个周期（游标为空）：不做加成判定，
+    // 只是把游标推进到当前周期，等下一个周期切换时才开始真正评估
+    if (!beforeChecked) {
+      task.bonusCheckedPeriod = currentPeriodStart;
+      return task.bonusCheckedPeriod !== beforeChecked;
+    }
+
+    // 从"上次评估到的周期"逐个周期往后走，评估每个已完整结束的周期，
+    // 直到追上当前周期为止（覆盖"隔了不止一个周期没打开应用"的情况）
+    var cursor = getNextPeriodStartKey(task.type, beforeChecked);
+    var bonusActive = beforeActive;
+
+    while (cursor && cursor < currentPeriodStart) {
+      var range = getPeriodRange(task.type, cursor);
+      var periodSum = sumCompletionsInRange(task.completions, range);
+      bonusActive = periodSum >= (task.targetCount || 1);
+      cursor = getNextPeriodStartKey(task.type, cursor);
+    }
+
+    task.bonusActive = bonusActive;
+    task.bonusCheckedPeriod = currentPeriodStart;
+
+    return task.bonusActive !== beforeActive || task.bonusCheckedPeriod !== beforeChecked;
+  }
+
+  /**
+   * 批量推进全部任务的周期加成状态，并在有变化时统一落盘一次。
+   * 由 listTasks() 在每次读取任务列表时调用（内部有游标短路，同一周期
+   * 内重复调用开销极小），也可在 app.js 启动流程里显式调用一次。
+   * @param {string} [dateStr]
+   * @returns {boolean} 是否发生了任何变化
+   */
+  function syncAllPeriodBonuses(dateStr) {
+    var state = DataStore.getState();
+    var changed = false;
+    (state.tasks || []).forEach(function (t) {
+      if (syncPeriodBonus(t, dateStr)) changed = true;
+    });
+    if (changed) DataStore.save();
+    return changed;
+  }
+
+  /* ------------------------------------------------------------------ *
    * 增删改查
    * ------------------------------------------------------------------ */
 
@@ -179,6 +271,7 @@
    */
   function listTasks(options) {
     options = options || {};
+    syncAllPeriodBonuses(); // 读取任务列表前先按需推进周期加成状态（游标短路，重复调用开销很小）
     var tasks = DataStore.getState().tasks || [];
     if (options.enabledOnly) {
       tasks = tasks.filter(function (t) { return t.enabled; });
@@ -220,7 +313,10 @@
       startDate: input.startDate || null,
       endDate: input.endDate || null,
       createdAt: DataStore.todayKey(),
-      completions: {}
+      completions: {},
+      // 【新增】周期达标连续加成状态，仅 weekly/monthly 任务会被 syncPeriodBonus 维护
+      bonusActive: false,
+      bonusCheckedPeriod: null
     };
 
     DataStore.mutate(function (s) { s.tasks.push(task); });
@@ -460,7 +556,11 @@
     // 任务补救
     getRescueCandidates: getRescueCandidates,
     getNextRescueDay: getNextRescueDay,
-    rescueTask: rescueTask
+    rescueTask: rescueTask,
+
+    // 周期达标连续加成
+    syncPeriodBonus: syncPeriodBonus,
+    syncAllPeriodBonuses: syncAllPeriodBonuses
   };
 
 }(typeof window !== 'undefined' ? window : this));

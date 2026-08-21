@@ -54,34 +54,23 @@
       },
 
       // ---- 任务列表 ----
-      // 每个任务：{ id, name, type, baseResourceReward, currencyReward,
-      //            targetCount, enabled, startDate, endDate, createdAt,
-      //            completions: { 'YYYY-MM-DD': count } }
-      // completions 为原始打卡记录：once 任务只会有一条记录即视为永久完成；
-      // daily 任务每天最多 1 条；weekly/monthly 由 streak.js/tasks.js
-      // 按自然周/月对 completions 求和判断是否达到 targetCount。
       tasks: [],
 
-      // ---- 连胜与保护卡状态（见需求文档第六节） ----
+      // ---- 连胜与保护卡状态 ----
       streak: {
         current: 0,
         longest: 0,
-        // 漏打检测游标：上一次逐日检查已处理到的日期，隔天登录时
-        // 从该日期之后开始逐日补算，避免重复处理
         lastCheckedDate: formatDateKey(now),
-        // 达标日期集合，用于统计、补救横幅与漏打检测：{ 'YYYY-MM-DD': true }
         activeDates: {}
       },
 
-      // ---- 保护卡使用记录（自动/主动），供统计页展示 ----
-      // { date: 'YYYY-MM-DD', type: 'auto' | 'manual', note }
+      // ---- 保护卡使用记录 ----
       freezeLog: [],
 
-      // ---- 兑换记录（见需求文档第七节） ----
-      // { date: 'YYYY-MM-DD', fromAmount, toAmount }
+      // ---- 兑换记录 ----
       exchangeLog: [],
 
-      // ---- 累计统计（见需求文档第九节） ----
+      // ---- 累计统计 ----
       stats: {
         totalTasksCompleted: 0,
         totalPrimaryEarned: 0,
@@ -99,7 +88,6 @@
           enabled: false,
           webhookUrl: '',
           time: '22:30',
-          // 记录当天是否已成功发送过提醒，防止重复推送
           lastNotificationSentDate: null
         },
         theme: 'default'
@@ -115,19 +103,32 @@
     return v !== null && typeof v === 'object' && !Array.isArray(v);
   }
 
+  /**
+   * 深层合并对象，用 override 中的字段覆盖/补充 base
+   */
   function deepMerge(base, override) {
     if (!isPlainObject(base)) {
       return override !== undefined ? override : base;
     }
+    
     var result = {};
-    var mergedKeys = Object.keys(base);
-Object.keys(override || {}).forEach(function (k) {
-  if (mergedKeys.indexOf(k) === -1) mergedKeys.push(k);
-});
-mergedKeys.forEach(function (key) {
+    var baseKeys = Object.keys(base);
+    var overrideKeys = isPlainObject(override) ? Object.keys(override) : [];
+    
+    // 搜集并去重所有 key
+    var allKeys = baseKeys.slice();
+    overrideKeys.forEach(function (k) {
+      if (allKeys.indexOf(k) === -1) {
+        allKeys.push(k);
+      }
+    });
+
+    // 递归合并字段
+    allKeys.forEach(function (key) {
       var baseVal = base[key];
       var hasOverride = override && Object.prototype.hasOwnProperty.call(override, key);
       var overrideVal = hasOverride ? override[key] : undefined;
+
       if (isPlainObject(baseVal) && isPlainObject(overrideVal)) {
         result[key] = deepMerge(baseVal, overrideVal);
       } else if (hasOverride) {
@@ -136,6 +137,7 @@ mergedKeys.forEach(function (key) {
         result[key] = baseVal;
       }
     });
+
     return result;
   }
 
@@ -143,19 +145,8 @@ mergedKeys.forEach(function (key) {
    * 版本迁移
    * ------------------------------------------------------------------ */
 
-  // 迁移步骤表：key 为迁移的起始版本号，value 为将该版本数据升级到
-  // "起始版本 + 1" 的转换函数。当前 DATA_VERSION = 1，为基线版本，暂无
-  // 需要执行的迁移步骤；未来新增字段/结构调整时，在此追加对应版本的
-  // 迁移函数即可，例如：
-  //   migrations[1] = function (data) { /* 1 -> 2 的调整 */ return data; };
   var migrations = {};
 
-  /**
-   * 将任意来源的原始数据（可能来自旧版本、手工编辑或导入文件）迁移/补全为
-   * 当前 DATA_VERSION 结构。缺失字段自动补默认值，不会因结构不完整而崩溃。
-   * @param {object|null} raw
-   * @returns {object}
-   */
   function migrateData(raw) {
     var defaults = createDefaultData();
     var data = deepMerge(defaults, isPlainObject(raw) ? raw : {});
@@ -178,14 +169,9 @@ mergedKeys.forEach(function (key) {
   }
 
   /* ------------------------------------------------------------------ *
-   * 结构校验（供导入功能与自检使用）
+   * 结构校验
    * ------------------------------------------------------------------ */
 
-  /**
-   * 校验数据是否包含必要的结构字段与 version 版本标识。
-   * @param {*} data
-   * @returns {{valid: boolean, errors: string[]}}
-   */
   function validateStructure(data) {
     var errors = [];
 
@@ -257,11 +243,6 @@ mergedKeys.forEach(function (key) {
     return safeSetItem(STORAGE_KEY, json);
   }
 
-  /**
-   * 从 localStorage 加载数据到内存，自动迁移/补全结构。
-   * 未初始化过（首次使用）时返回全新默认数据并立即落盘。
-   * @returns {object}
-   */
   function load() {
     var raw = safeGetItem(STORAGE_KEY);
     var parsed = null;
@@ -281,10 +262,6 @@ mergedKeys.forEach(function (key) {
     return _state;
   }
 
-  /**
-   * 获取当前内存态数据，若尚未加载则先从 localStorage 加载。
-   * @returns {object}
-   */
   function getState() {
     if (!_state) {
       load();
@@ -292,26 +269,15 @@ mergedKeys.forEach(function (key) {
     return _state;
   }
 
-  /**
-   * 以可变方式修改状态并自动持久化。
-   * mutator 直接修改传入的 state 对象（就地修改），返回值会被忽略。
-   * @param {(state: object) => void} mutator
-   * @returns {object} 修改后的最新状态
-   */
   function mutate(mutator) {
     var state = getState();
-    mutator(state);
+    if (typeof mutator === 'function') {
+      mutator(state);
+    }
     persist();
     return state;
   }
 
-  /**
-   * 用一份全新数据整体替换当前状态（用于导入备份 / 恢复出厂）。
-   * 默认会先执行结构迁移与字段补全，除非显式跳过。
-   * @param {object} newData
-   * @param {{skipMigration?: boolean}} [options]
-   * @returns {object}
-   */
   function replaceState(newData, options) {
     options = options || {};
     _state = options.skipMigration ? newData : migrateData(newData);
@@ -319,10 +285,6 @@ mergedKeys.forEach(function (key) {
     return _state;
   }
 
-  /**
-   * 恢复出厂设置：清空为全新默认数据。
-   * @returns {object}
-   */
   function resetToDefault() {
     _state = createDefaultData();
     persist();
@@ -337,12 +299,10 @@ mergedKeys.forEach(function (key) {
     DATA_VERSION: DATA_VERSION,
     STORAGE_KEY: STORAGE_KEY,
 
-    // 数据结构 & 迁移
     createDefaultData: createDefaultData,
     migrateData: migrateData,
     validateStructure: validateStructure,
 
-    // 读写 API
     load: load,
     save: persist,
     getState: getState,
@@ -350,7 +310,6 @@ mergedKeys.forEach(function (key) {
     replaceState: replaceState,
     reset: resetToDefault,
 
-    // 日期工具（统一日期键格式，供其余模块复用）
     formatDateKey: formatDateKey,
     todayKey: todayKey
   };

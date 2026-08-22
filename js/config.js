@@ -236,7 +236,46 @@
           achieved: 'assets/skins/video-flame/flame-achieved.mp4',
           bonus: 'assets/skins/video-flame/flame-bonus.mp4'
         }
+      },
+      {
+      id: 'fanren-hanli',
+      name: '凡人修仙（韩立·青云雷动）',
+      vars: {
+        '--primary-color': '#00b4d8',     // 核心青蓝色（Han Li Blue，取自长袍与雷震翅）
+        '--flame-orange': '#2ec4b6',      // 掌天瓶灵光青绿
+        '--flame-red': '#7209b7',         // 辟邪神雷/紫宵神雷紫（参照图1紫色光芒）
+        '--currency-color': '#00f5d4',    // 极品灵石发光青蓝
+        '--shield-color': '#ffb703',      // 金雷竹/金色避雷符光芒
+        '--bg-base': '#0b0f19',           // 深度修仙夜空底色
+        '--bg-elevated': '#151c2c',       // 卡片背景（玄青色）
+        '--bg-elevated-2': '#1e293b',     // 二级卡片背景
+        '--bg-elevated-3': '#334155',     // 边框与三级背景
+        '--text-primary': '#f1f5f9',     // 主文字（冷白）
+        '--text-muted': '#94a3b8'        // 辅文字（仙气灰）
+      },
+      /* 凡人修仙专属资源定制 */
+      resources: {
+        primaryResource: { name: '灵气', icon: '✨' },      // 可传图片路径如 'assets/skins/hanli/zhangtianping.png'
+        currency:        { name: '灵石', icon: '💎' },      // 极品灵石
+        streakFreeze:    { name: '避雷符', icon: '🗡️' }     // 青竹剑阵/护身法符
+      },
+      flame: {
+        idle: 'assets/skins/video-fanren/hanli-idle.mp4',
+        transition: 'assets/skins/video-fanren/hanli-transition.mp4',
+        achieved: 'assets/skins/video-fanren/hanli-achieved.mp4',
+        bonus: 'assets/skins/video-fanren/hanli-bonus.mp4'
       }
+    }
+
+
+
+
+
+
+
+
+
+
     ]
   }
   };

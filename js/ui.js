@@ -105,7 +105,10 @@
       video.muted = true;   // 【保留】idle/achieved 循环视频默认静音，避免被浏览器拦截整体播放
       video.setAttribute('playsinline', '');
       video.setAttribute('webkit-playsinline', '');
-      video.src = 'assets/skins/video-flame/flame-idle.mp4';
+      var theme = getCurrentTheme();
+if (theme && theme.flame && theme.flame.idle) {
+  video.src = theme.flame.idle;
+}
       wrap.insertBefore(video, wrap.firstChild);
     }
     return video;
@@ -113,11 +116,19 @@
 
   /** 强制显示视频，隐藏旧版 SVG 火苗。 */
   function refreshFlameAssets() {
-    var svg = document.querySelector('#flameStage .flame-svg') || document.querySelector('.flame-svg');
-    var video = ensureFlameVideoEl();
+  var theme = getCurrentTheme();
+  var hasFlameVideo = theme && theme.flame;
+  var svg = document.querySelector('#flameStage .flame-svg') || document.querySelector('.flame-svg');
+  var video = ensureFlameVideoEl();
+
+  if (hasFlameVideo) {
     if (svg) svg.style.display = 'none';
     if (video) video.style.display = 'block';
+  } else {
+    if (svg) svg.style.display = '';
+    if (video) video.style.display = 'none';
   }
+}
 
   /**
    * 切换火苗视频状态。
@@ -133,7 +144,22 @@ function applyFlameVisualState(kind) {
     var video = ensureFlameVideoEl();
     if (!video) return;
 
-    var targetSrc = 'assets/skins/video-flame/flame-' + kind + '.mp4';
+    var theme = getCurrentTheme();
+var flameConfig = theme && theme.flame;
+
+// 如果当前皮肤没配置这个 kind 的视频（或整体没配置 flame），
+// 就回退到 SVG，不再尝试播放视频
+if (!flameConfig || !flameConfig[kind]) {
+  var svg = document.querySelector('#flameStage .flame-svg') || document.querySelector('.flame-svg');
+  var video = $('flameVideo');
+  if (svg) svg.style.display = '';
+  if (video) video.style.display = 'none';
+  flameVideoState.currentKind = kind;
+  flameVideoState.oneShotPlaying = false;
+  return;
+}
+
+var targetSrc = flameConfig[kind];
 
     video.loop = loop;
     video.muted = loop;   // 【新增】循环播放（idle/achieved）静音；一次性播放（transition/bonus）带声音

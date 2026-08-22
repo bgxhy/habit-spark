@@ -269,12 +269,17 @@
     return _state;
   }
 
-  function mutate(mutator) {
+    function mutate(mutator) {
     var state = getState();
     if (typeof mutator === 'function') {
       mutator(state);
     }
     persist();
+    // 每次数据变化后，顺便（防抖）同步一份到云端，供云端定时任务读取。
+    // SyncManager 是可选模块（sync.js 未加载/未配置时不影响本地功能）。
+    if (global.SyncManager && typeof global.SyncManager.push === 'function') {
+      global.SyncManager.push();
+    }
     return state;
   }
 

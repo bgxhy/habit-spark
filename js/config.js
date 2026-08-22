@@ -122,7 +122,14 @@
     storage: {
       key: 'habit_spark_data'
     },
-
+    /* ---- 云端同步（Supabase） ---- */
+    sync: {
+      supabaseUrl: 'https://trhymxoouhridywjjbxn.supabase.co',
+      supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRyaHlteG9vdWhyaWR5d2pqYnhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczNzgxNTcsImV4cCI6MjEwMjk1NDE1N30.LVumuDAsmioHEKuusQI2GDp4rePssf71eR031X1TtxA',
+      tableName: 'habit_data',
+      rowId: 'default',
+      pushDebounceMs: 1500 // 短时间内多次数据变化，合并成一次上传，避免刷接口
+    },
     /* ---- 每日提醒 / 企业微信 Webhook（见需求文档第十二节） ---- */
     reminder: {
       enabledDefault: false,

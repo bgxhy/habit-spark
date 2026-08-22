@@ -488,8 +488,16 @@
     if (task.type === 'once' && getTotalCompletions(task) > 0) {
       return { success: false, reason: 'already_done' };
     }
-    if (task.completions && task.completions[dateStr] > 0) {
+      if (task.completions && task.completions[dateStr] > 0) {
       return { success: false, reason: 'already_completed_that_day' };
+    }
+
+    // 每天只能补救一次：只要这一天已经有任意任务被标记完成
+    // （无论是当天正常打卡，还是补救了别的任务），当天就视为已补救，
+    // 不再允许补救第二个任务。必须放在下面 streakWasBroken 判断之前，
+    // 否则这里读到的会是"补救后"的状态。
+    if (wasAnyTaskCompletedOn(state.tasks, dateStr)) {
+      return { success: false, reason: 'day_already_rescued' };
     }
 
     var streakWasBroken = !wasAnyTaskCompletedOn(state.tasks, dateStr);

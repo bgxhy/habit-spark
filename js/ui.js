@@ -1051,7 +1051,7 @@ var targetSrc = flameConfig[kind];
           showToast(dayEntry.date + ' 补救成功！');
           renderAll();
         } else {
-          showToast('补救失败，请重试');
+          showToast(res.reason === 'day_already_rescued' ? '这一天已经补救过了' : '补救失败，请重试');
         }
       });
       area.appendChild(btn);

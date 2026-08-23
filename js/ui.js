@@ -31,7 +31,68 @@
   var CHARGE_DURATION_MS = 1000; // 须与 style.css 中 --duration-charge 保持一致
 
   /* ------------------------------------------------------------------ *
-   * 【新增】皮肤/主题系统 + 火苗视频状态机
+   * 【新增】普通模式 / 家长模式切换
+   * 触发方式：连续点击"连胜天数"数字或其下方文字标签（1 秒内点满 3 次），
+   * 弹出密码框，输入正确密码后在两种模式间切换；密码错误直接关闭弹窗，
+   * 不做重试提示。普通模式下：底部导航"任务管理""设置"两个按钮点击无效
+   * （弹 toast 提示，不打开对应面板）。模式持久化保存在
+   * DataStore 的 settings.mode 字段，刷新/重启后保留。
+   * ------------------------------------------------------------------ */
+
+  // 【修改密码】只需要改这一个常量即可，其余逻辑不用动。
+  var PARENT_MODE_PASSWORD = '20240210';
+
+  var _streakClickTimestamps = [];
+
+  function getCurrentMode() {
+    var state = DataStore.getState();
+    return (state.settings && state.settings.mode) || 'parent';
+  }
+
+  function isParentMode() {
+    return getCurrentMode() === 'parent';
+  }
+
+  function setMode(mode) {
+    DataStore.mutate(function (s) { s.settings.mode = mode; });
+  }
+
+  /**
+   * 连续点击计数：1 秒内累计点满 3 次才触发密码弹窗，超过 1 秒的旧记录会被清掉。
+   */
+  function handleStreakLabelClick() {
+    var now = Date.now();
+    _streakClickTimestamps.push(now);
+    _streakClickTimestamps = _streakClickTimestamps.filter(function (t) { return now - t < 1000; });
+
+    if (_streakClickTimestamps.length >= 3) {
+      _streakClickTimestamps = [];
+      promptModeSwitch();
+    }
+  }
+
+  /**
+   * 弹出密码框并尝试切换模式。密码错误或用户取消，直接关闭弹窗，不给出多余提示。
+   */
+  function promptModeSwitch() {
+    var currentMode = getCurrentMode();
+    var targetMode = currentMode === 'parent' ? 'normal' : 'parent';
+    var input = global.prompt('请输入密码切换到' + (targetMode === 'parent' ? '家长模式' : '普通模式') + '：');
+    if (input === null) return; // 用户取消
+    if (input !== PARENT_MODE_PASSWORD) return; // 密码错误：直接关闭，不重试
+    setMode(targetMode);
+    showToast('已切换到' + (targetMode === 'parent' ? '家长模式' : '普通模式'));
+  }
+
+  function bindModeSwitch() {
+    var streakCountEl = $('streakCount');
+    var streakLabelEl = $('streakLabel');
+    if (streakCountEl) streakCountEl.addEventListener('click', handleStreakLabelClick);
+    if (streakLabelEl) streakLabelEl.addEventListener('click', handleStreakLabelClick);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 皮肤/主题系统 + 火苗视频状态机
    * ------------------------------------------------------------------ */
 
   var flameVideoState = { currentKind: null, oneShotPlaying: false };
@@ -51,7 +112,7 @@
   }
 
   /**
-   * 【新增】解析某个资源在"当前主题"下应展示的配置（name / icon 等）。
+   * 解析某个资源在"当前主题"下应展示的配置（name / icon 等）。
    * 优先使用当前主题 theme.resources[resourceKey] 的覆盖值，
    * 缺失字段回退到 CONFIG.resources[resourceKey]（字段级合并，
    * 而非整体替换，避免主题只覆盖部分字段时丢失 key 等信息）；
@@ -102,7 +163,7 @@
       video.className = 'flame-video';
       video.autoplay = true;
       video.loop = true;
-      video.muted = true;   // 【保留】idle/achieved 循环视频默认静音，避免被浏览器拦截整体播放
+      video.muted = true;   // idle/achieved 循环视频默认静音，避免被浏览器拦截整体播放
       video.setAttribute('playsinline', '');
       video.setAttribute('webkit-playsinline', '');
       var theme = getCurrentTheme();
@@ -162,7 +223,7 @@ if (!flameConfig || !flameConfig[kind]) {
 var targetSrc = flameConfig[kind];
 
     video.loop = loop;
-    video.muted = loop;   // 【新增】循环播放（idle/achieved）静音；一次性播放（transition/bonus）带声音
+    video.muted = loop;   // 循环播放（idle/achieved）静音；一次性播放（transition/bonus）带声音
 
     if (video.getAttribute('src') !== targetSrc) {
       video.src = targetSrc;
@@ -175,7 +236,7 @@ var targetSrc = flameConfig[kind];
       playPromise.catch(function (err) {
         console.warn('[Flame Video] 播放被浏览器拦截:', err);
         if (!loop) {
-          video.muted = true;   // 【新增】带声音播放被拦截时，退回静音再试一次，保证至少画面能播
+          video.muted = true;   // 带声音播放被拦截时，退回静音再试一次，保证至少画面能播
           video.play().catch(function () {});
         }
       });
@@ -255,14 +316,14 @@ var targetSrc = flameConfig[kind];
     refreshFlameAssets();
     applyFlameVisualState(StreakManager.isTodayActive() ? 'achieved' : 'idle');
 
-    renderResourceBar();   // 【新增】资源图标可能随主题变化，需要重画
-    renderTaskSidebar();   // 【新增】任务环上的资源图标同理，需要重画
+    renderResourceBar();   // 资源图标可能随主题变化，需要重画
+    renderTaskSidebar();   // 任务环上的资源图标同理，需要重画
     renderSkinSection();
     showToast('已切换皮肤：' + (theme.name || theme.id));
   }
 
   /* ------------------------------------------------------------------ *
-   * 【新增】满屏烟花 / 暴击火箭特效（Canvas 实现，不依赖任何图片素材）
+   * 满屏烟花 / 暴击火箭特效（Canvas 实现，不依赖任何图片素材）
    * ------------------------------------------------------------------ */
 
   var FIREWORK_COLORS = ['#ffd700', '#ff8a3d', '#ff3d3d', '#5ec8ff', '#38e8d0', '#ffffff'];
@@ -410,7 +471,7 @@ var targetSrc = flameConfig[kind];
   }
 
   /* ------------------------------------------------------------------ *
-   * 【新增】动态补充样式（皮肤卡片 / 火苗视频 / 加成星标）
+   * 动态补充样式（皮肤卡片 / 火苗视频 / 加成星标）
    * ------------------------------------------------------------------ */
 
   function injectDynamicStylesV2() {
@@ -744,39 +805,39 @@ var targetSrc = flameConfig[kind];
    * 每日免费礼包（index.html 未预留专属容器，动态注入到火苗舞台）
    * ------------------------------------------------------------------ */
 
- function ensureDailyGiftButton() {
-  var stage = $('flameStage');
-  if (!stage) return null;
-  var btn = $('dailyGiftBtn');
-  if (!btn) {
-    btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'dailyGiftBtn';
-    btn.className = 'btn btn--ghost';
-    btn.style.position = 'fixed';
-    btn.style.right = '14px';
-    btn.style.bottom = 'calc(var(--bottom-nav-height) + 14px)';
-    btn.style.fontSize = '12.5px';
-    btn.style.padding = '8px 16px';
-    btn.style.zIndex = '11';
-    document.body.appendChild(btn);
-    btn.addEventListener('click', handleClaimDailyGift);
+  function ensureDailyGiftButton() {
+    var stage = $('flameStage');
+    if (!stage) return null;
+    var btn = $('dailyGiftBtn');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'dailyGiftBtn';
+      btn.className = 'btn btn--ghost';
+      btn.style.position = 'fixed';
+      btn.style.right = '14px';
+      btn.style.bottom = 'calc(var(--bottom-nav-height) + 14px)';
+      btn.style.fontSize = '12.5px';
+      btn.style.padding = '8px 16px';
+      btn.style.zIndex = '11';
+      document.body.appendChild(btn);
+      btn.addEventListener('click', handleClaimDailyGift);
+    }
+    return btn;
   }
-  return btn;
-}
 
- function renderDailyGiftButton() {
-  var btn = ensureDailyGiftButton();
-  if (!btn) return;
-  var claimed = RewardEngine.isDailyGiftClaimedToday();
-  if (claimed) {
-    btn.style.display = 'none';
-    return;
+  function renderDailyGiftButton() {
+    var btn = ensureDailyGiftButton();
+    if (!btn) return;
+    var claimed = RewardEngine.isDailyGiftClaimedToday();
+    if (claimed) {
+      btn.style.display = 'none';
+      return;
+    }
+    btn.style.display = '';
+    btn.textContent = '领取每日礼包 ' + getResourceIconPlain('primaryResource');
+    btn.disabled = false;
   }
-  btn.style.display = '';
-  btn.textContent = '领取每日礼包 ' + getResourceIconPlain('primaryResource');
-  btn.disabled = false;
-}
 
   function handleClaimDailyGift() {
     var result = RewardEngine.claimDailyGift();
@@ -812,12 +873,19 @@ var targetSrc = flameConfig[kind];
   function renderTaskSidebar() {
     var listEl = $('taskList');
     var emptyEl = $('taskListEmpty');
-    // 一次性任务完成后直接从任务栏移除（不再置灰保留）；daily/weekly/monthly
-    // 任务保留原有"完成后置灰"的展示方式，因为它们会在下个周期重新可打卡
-    var tasks = TaskManager.listTasks({ enabledOnly: true }).filter(function (t) {
-      return !(t.type === 'once' && TaskManager.getTotalCompletions(t) > 0);
-    });
     var todayKey = DataStore.todayKey();
+
+    // 过滤规则：
+    // 1. once 任务完成后已在 tasks.js 里直接从数据中删除，这里的判断是双重保险；
+    // 2. 【新增】daily / weekly 任务只要"今天"已经有完成记录，就从侧边栏隐藏一天，
+    //    明天（completions 里没有今天这个 key 了）会自动重新出现。注意这里判断的
+    //    是"今天有没有打卡"，不是"整个周期是否达标"——weekly 任务哪怕这周还没
+    //    集满 targetCount 次，只要今天已经打过一次，今天也照样隐藏。
+    var tasks = TaskManager.listTasks({ enabledOnly: true }).filter(function (t) {
+      if (t.type === 'once' && TaskManager.getTotalCompletions(t) > 0) return false;
+      if ((t.type === 'daily' || t.type === 'weekly') && t.completions && t.completions[todayKey] > 0) return false;
+      return true;
+    });
 
     Array.prototype.slice.call(listEl.querySelectorAll('.task-item')).forEach(function (n) { n.remove(); });
 
@@ -849,6 +917,7 @@ var targetSrc = flameConfig[kind];
       var label = document.createElement('div');
       label.className = 'task-item__label';
       label.textContent = task.name;
+      label.title = task.name; // 名字过长时，桌面端鼠标悬停可看完整名称
 
       item.appendChild(ring);
       item.appendChild(label);
@@ -1379,6 +1448,14 @@ var targetSrc = flameConfig[kind];
     Array.prototype.slice.call(document.querySelectorAll('.nav-btn')).forEach(function (btn) {
       btn.addEventListener('click', function () {
         var tab = btn.dataset.tab;
+
+        // 【新增】普通模式下，"任务管理""设置"这两个按钮点击无效，
+        // 直接提示并 return，不打开对应面板。家长模式下不受影响。
+        if (!isParentMode() && (tab === 'taskManager' || tab === 'settings')) {
+          showToast('该功能仅家长模式下可用');
+          return;
+        }
+
         var panel = document.querySelector('.tab-panel[data-panel="' + tab + '"]');
         if (panel && panel.classList.contains('open')) {
           closeAllPanels();
@@ -1394,18 +1471,7 @@ var targetSrc = flameConfig[kind];
 
     $('sheetOverlay').addEventListener('click', closeAllPanels);
   }
-    function toggleTaskSidebar(forceState) {
-    var sidebar = $('taskSidebar');
-    var overlay = $('sidebarOverlay');
-    var shouldOpen = typeof forceState === 'boolean' ? forceState : !sidebar.classList.contains('open');
-    sidebar.classList.toggle('open', shouldOpen);
-    overlay.classList.toggle('visible', shouldOpen);
-  }
 
-  function bindSidebarToggle() {
-    $('sidebarToggleBtn').addEventListener('click', function () { toggleTaskSidebar(); });
-    $('sidebarOverlay').addEventListener('click', function () { toggleTaskSidebar(false); });
-  }
   /* ------------------------------------------------------------------ *
    * 跨模块事件联动
    * ------------------------------------------------------------------ */
@@ -1442,12 +1508,30 @@ var targetSrc = flameConfig[kind];
     injectDynamicStylesV2();
     applySavedThemeOnBoot(); // 先应用已保存的皮肤配色，避免首帧闪一下默认配色
     bindBottomNav();
-    bindSidebarToggle();   // ← 新增这一行
+    bindSidebarToggle();
+    bindModeSwitch();   // 【新增】绑定"连续点击连胜天数"触发模式切换
     bindShopStaticEvents();
     bindSettingsEvents();
     bindDomainEvents();
     $('addTaskBtn').addEventListener('click', function () { openTaskForm(null); });
     renderAll();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 侧边任务栏 开/关
+   * ------------------------------------------------------------------ */
+
+  function toggleTaskSidebar(forceState) {
+    var sidebar = $('taskSidebar');
+    var overlay = $('sidebarOverlay');
+    var shouldOpen = typeof forceState === 'boolean' ? forceState : !sidebar.classList.contains('open');
+    sidebar.classList.toggle('open', shouldOpen);
+    overlay.classList.toggle('visible', shouldOpen);
+  }
+
+  function bindSidebarToggle() {
+    $('sidebarToggleBtn').addEventListener('click', function () { toggleTaskSidebar(); });
+    $('sidebarOverlay').addEventListener('click', function () { toggleTaskSidebar(false); });
   }
 
   /* ------------------------------------------------------------------ *

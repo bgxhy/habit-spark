@@ -83,14 +83,17 @@
       },
 
       // ---- 设置 ----
-      settings: {
+           settings: {
         reminder: {
           enabled: false,
           webhookUrl: '',
           time: '22:30',
           lastNotificationSentDate: null
         },
-        theme: 'default'
+        theme: 'default',
+        // 【普通模式/家长模式】默认 'parent'（家长模式，全部功能可用）。
+        // 切换密码常量在 ui.js 顶部 PARENT_MODE_PASSWORD，如需改密码去那里改即可。
+        mode: 'parent'
       }
     };
   }

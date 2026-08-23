@@ -380,7 +380,7 @@
    * @param {string} [dateStr] 默认今天
    * @returns {{success:boolean, task?:object, periodComplete?:boolean, reason?:string}}
    */
-  function completeTask(taskId, dateStr) {
+    function completeTask(taskId, dateStr) {
     dateStr = dateStr || DataStore.todayKey();
     var task = findTaskById(DataStore.getState(), taskId);
     if (!task) return { success: false, reason: 'not_found' };
@@ -396,10 +396,22 @@
     });
 
     var updated = findTaskById(DataStore.getState(), taskId);
+    var periodComplete = isTaskDoneForPeriod(updated, dateStr);
+
+    // 【新增】一次性任务（once）完成后不再以"隐藏/置灰"方式保留，而是直接
+    // 从任务列表中删除（含任务管理页），因为 once 任务没有"明天再出现"的概念，
+    // 完成即代表这条任务生命周期结束。updated 是删除前捕获的对象引用，
+    // 调用方（rewards.js）仍能正常读取 baseResourceReward 等字段计算奖励。
+    if (updated && updated.type === 'once' && periodComplete) {
+      DataStore.mutate(function (s) {
+        s.tasks = s.tasks.filter(function (t) { return t.id !== taskId; });
+      });
+    }
+
     return {
       success: true,
       task: updated,
-      periodComplete: isTaskDoneForPeriod(updated, dateStr)
+      periodComplete: periodComplete
     };
   }
 

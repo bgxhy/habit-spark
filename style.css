@@ -188,7 +188,7 @@ h1, h2, h3, p { margin: 0; }
   width: var(--sidebar-width);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;   /* ← 新增这一行，优化移动端惯性滑动 */
-  padding: var(--space-3) var(--space-2);
+    padding: calc(var(--topbar-height) + var(--space-3)) var(--space-2) var(--space-3);
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
   box-shadow: 8px 0 24px rgba(0, 0, 0, 0.35);

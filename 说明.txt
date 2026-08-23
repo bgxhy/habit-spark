@@ -1,3 +1,3 @@
 git add .
-git commit -m "侧边栏改为可收起"
+git commit -m "手机图标上传1.1"
 git push

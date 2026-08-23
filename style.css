@@ -187,6 +187,7 @@ h1, h2, h3, p { margin: 0; }
   left: 0;
   width: var(--sidebar-width);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;   /* ← 新增这一行，优化移动端惯性滑动 */
   padding: var(--space-3) var(--space-2);
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
@@ -234,6 +235,7 @@ h1, h2, h3, p { margin: 0; }
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  padding-bottom: var(--bottom-nav-height);   /* ← 新增，避免最后一项被底部导航遮挡 */
 }
 
 /* 任务项（由 JS 渲染）参考结构，供后续批次复用类名：

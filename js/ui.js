@@ -744,36 +744,39 @@ var targetSrc = flameConfig[kind];
    * 每日免费礼包（index.html 未预留专属容器，动态注入到火苗舞台）
    * ------------------------------------------------------------------ */
 
-  function ensureDailyGiftButton() {
-    var stage = $('flameStage');
-    if (!stage) return null;
-    var btn = $('dailyGiftBtn');
-    if (!btn) {
-      btn = document.createElement('button');
-      btn.type = 'button';
-      btn.id = 'dailyGiftBtn';
-      btn.className = 'btn btn--ghost';
-      btn.style.position = 'absolute';
-      btn.style.left = '50%';
-      btn.style.bottom = '14px';
-      btn.style.transform = 'translateX(-50%)';
-      btn.style.fontSize = '12.5px';
-      btn.style.padding = '8px 16px';
-      stage.appendChild(btn);
-      btn.addEventListener('click', handleClaimDailyGift);
-    }
-    return btn;
+ function ensureDailyGiftButton() {
+  var stage = $('flameStage');
+  if (!stage) return null;
+  var btn = $('dailyGiftBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'dailyGiftBtn';
+    btn.className = 'btn btn--ghost';
+    btn.style.position = 'fixed';
+    btn.style.right = '14px';
+    btn.style.bottom = 'calc(var(--bottom-nav-height) + 14px)';
+    btn.style.fontSize = '12.5px';
+    btn.style.padding = '8px 16px';
+    btn.style.zIndex = '11';
+    document.body.appendChild(btn);
+    btn.addEventListener('click', handleClaimDailyGift);
   }
+  return btn;
+}
 
-  function renderDailyGiftButton() {
-    var btn = ensureDailyGiftButton();
-    if (!btn) return;
-    var claimed = RewardEngine.isDailyGiftClaimedToday();
-    btn.textContent = claimed ? '今日礼包已领取' : ('领取每日礼包 ' + getResourceIconPlain('primaryResource'));
-    btn.disabled = claimed;
-    btn.style.opacity = claimed ? '0.45' : '1';
-    btn.style.pointerEvents = claimed ? 'none' : 'auto';
+ function renderDailyGiftButton() {
+  var btn = ensureDailyGiftButton();
+  if (!btn) return;
+  var claimed = RewardEngine.isDailyGiftClaimedToday();
+  if (claimed) {
+    btn.style.display = 'none';
+    return;
   }
+  btn.style.display = '';
+  btn.textContent = '领取每日礼包 ' + getResourceIconPlain('primaryResource');
+  btn.disabled = false;
+}
 
   function handleClaimDailyGift() {
     var result = RewardEngine.claimDailyGift();

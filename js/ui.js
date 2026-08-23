@@ -1391,7 +1391,18 @@ var targetSrc = flameConfig[kind];
 
     $('sheetOverlay').addEventListener('click', closeAllPanels);
   }
+    function toggleTaskSidebar(forceState) {
+    var sidebar = $('taskSidebar');
+    var overlay = $('sidebarOverlay');
+    var shouldOpen = typeof forceState === 'boolean' ? forceState : !sidebar.classList.contains('open');
+    sidebar.classList.toggle('open', shouldOpen);
+    overlay.classList.toggle('visible', shouldOpen);
+  }
 
+  function bindSidebarToggle() {
+    $('sidebarToggleBtn').addEventListener('click', function () { toggleTaskSidebar(); });
+    $('sidebarOverlay').addEventListener('click', function () { toggleTaskSidebar(false); });
+  }
   /* ------------------------------------------------------------------ *
    * 跨模块事件联动
    * ------------------------------------------------------------------ */
@@ -1428,6 +1439,7 @@ var targetSrc = flameConfig[kind];
     injectDynamicStylesV2();
     applySavedThemeOnBoot(); // 先应用已保存的皮肤配色，避免首帧闪一下默认配色
     bindBottomNav();
+    bindSidebarToggle();   // ← 新增这一行
     bindShopStaticEvents();
     bindSettingsEvents();
     bindDomainEvents();

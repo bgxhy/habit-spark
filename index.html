@@ -36,7 +36,12 @@
   </header>
 
   <!-- ============ 主舞台：侧边任务列表 + 中央火苗 ============ -->
-  <main class="stage">
+    <main class="stage">
+
+    <button class="sidebar-toggle" type="button" id="sidebarToggleBtn" aria-label="打开任务列表">
+      <span class="sidebar-toggle__icon">📋</span>
+    </button>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <aside class="task-sidebar" id="taskSidebar" aria-label="任务列表">
       <div class="task-sidebar-inner" id="taskList">

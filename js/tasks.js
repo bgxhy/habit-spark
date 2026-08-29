@@ -157,9 +157,16 @@
    * @param {string} [dateStr]
    * @returns {boolean}
    */
-  function isTaskDoneForPeriod(task, dateStr) {
+    function isTaskDoneForPeriod(task, dateStr) {
     if (task.type === 'once') {
       return getTotalCompletions(task) > 0;
+    }
+    if (task.type === 'weekly' || task.type === 'monthly') {
+      // 【改动】weekly/monthly 任务不再受"累计次数达标后整个周期锁死"的限制：
+      // 只判断"今天有没有打过卡"，跟 daily 任务一样每天最多打一次、每天都能打。
+      // 累计次数只影响奖励加成（见 completeTask 里的 periodComplete 计算），
+      // 不再影响是否可以继续打卡。
+      return !!(task.completions && task.completions[dateStr] > 0);
     }
     var target = task.targetCount || 1;
     return getTaskProgress(task, dateStr) >= target;
@@ -396,13 +403,21 @@
     });
 
     var updated = findTaskById(DataStore.getState(), taskId);
-    var periodComplete = isTaskDoneForPeriod(updated, dateStr);
+    var doneToday = isTaskDoneForPeriod(updated, dateStr);
 
-    // 【新增】一次性任务（once）完成后不再以"隐藏/置灰"方式保留，而是直接
-    // 从任务列表中删除（含任务管理页），因为 once 任务没有"明天再出现"的概念，
-    // 完成即代表这条任务生命周期结束。updated 是删除前捕获的对象引用，
-    // 调用方（rewards.js）仍能正常读取 baseResourceReward 等字段计算奖励。
-    if (updated && updated.type === 'once' && periodComplete) {
+    // 【新增】periodComplete 现在专指"本周期累计次数是否已达到 targetCount"，
+    // 只用于触发"本周期已完成！"提示和奖励加成判定，跟"今天能不能继续打卡"
+    // （doneToday）是两件独立的事——weekly/monthly 攒够次数后只会让这个字段
+    // 变 true，不会再影响 doneToday，所以不会锁死后续打卡。
+    var periodComplete;
+    if (updated.type === 'weekly' || updated.type === 'monthly') {
+      var target = updated.targetCount || 1;
+      periodComplete = getTaskProgress(updated, dateStr) >= target;
+    } else {
+      periodComplete = doneToday;
+    }
+
+    if (updated && updated.type === 'once' && doneToday) {
       DataStore.mutate(function (s) {
         s.tasks = s.tasks.filter(function (t) { return t.id !== taskId; });
       });

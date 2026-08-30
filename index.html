@@ -52,7 +52,20 @@
         <!-- 任务项由 tasks.js / ui.js 动态渲染于此 -->
       </div>
     </aside>
+        </aside>
 
+    <button class="quota-toggle" type="button" id="quotaToggleBtn" aria-label="打开今日任务统计">
+      <span class="quota-toggle__icon">🎯</span>
+    </button>
+    <div class="quota-overlay" id="quotaOverlay"></div>
+
+    <aside class="quota-sidebar" id="quotaSidebar" aria-label="今日任务统计">
+      <h3 class="quota-sidebar__title">今日任务奖励</h3>
+      <p class="quota-sidebar__count" id="quotaCompletedCount">已完成 0 个任务</p>
+      <div class="quota-tier-list" id="quotaTierList">
+        <!-- 档位进度条由 ui.js 动态渲染于此 -->
+      </div>
+    </aside>
     <section class="flame-stage" id="flameStage" aria-label="连胜火苗">
       <div class="flame-wrap" id="flameWrap">
         <span class="streak-badge" id="streakBadge">1</span>
@@ -272,7 +285,14 @@
 
   <!-- ============ Toast 提示容器 ============ -->
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
-
+  <!-- ============ 每日任务数量奖励：打卡完成后的进度条弹窗 ============ -->
+  <div class="quota-popup hidden" id="quotaPopup">
+    <div class="quota-popup__box">
+      <p class="quota-popup__count" id="quotaPopupCount">今日已完成 0 个任务</p>
+      <div class="quota-tier-list" id="quotaPopupTierList">
+        <!-- 与 quotaTierList 共用渲染函数，内容一致 -->
+      </div>
+    </div>
 </div>
 
 <!-- 脚本按依赖顺序加载：config/data 打底 → 业务逻辑 → 表现层 → app.js 总装配 -->

@@ -81,7 +81,20 @@
          不影响货币奖励——与随机双倍的既有规则保持一致。 */
       periodBonusMultiplier: 1.5
     },
-
+        /* ---- 每日任务数量奖励（右侧"每日任务栏"面板） ----
+       tiers 数组支持自由增删档位：每个档位包含
+       { count: 需要完成的任务数量, primaryResource: 火力奖励, currency: 钻石奖励 }。
+       判定规则：今天完成的不同任务数量（含一次性任务，任务删除后仍计数在内）
+       每首次达到或超过某个档位的 count，就发放一次对应奖励，每个档位只发一次，
+       多个档位在同一天可以叠加触发（比如一次打卡同时跨过第2档和第5档，两档奖励都发）。
+       如需修改档位数量/奖励数值，直接改这个数组即可，支持任意增删（不限于3档）。 ---- */
+    dailyTaskQuota: {
+      tiers: [
+        { count: 2, primaryResource: 2, currency: 0 },
+        { count: 5, primaryResource: 5, currency: 0 },
+        { count: 8, primaryResource: 8, currency: 0 }
+      ]
+    },
     /* ---- 连胜与保护卡（见需求文档第六节） ---- */
     streak: {
       freezeEarnThreshold: 5,   // 连续达标满 N 天自动获得 1 张保护卡

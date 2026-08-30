@@ -770,12 +770,11 @@ var targetSrc = flameConfig[kind];
     }
 
     var flameEl = $('flameWrap');
-    var bonusTag = result.reward.bonusApplied ? ' ✨加成中' : ''; // bonusApplied 由 rewards.js 提供，暂未接入时静默忽略
+    var bonusTag = result.reward.bonusApplied ? ' ✨加成中' : '';
     var rewardText = '+' + result.reward.primaryResource + ' ' + getResourceIconPlain('primaryResource') +
       (result.reward.doubled ? ' 双倍！' : '') + bonusTag;
     spawnFloatingText(flameEl, rewardText);
 
-    // 满屏烟花特效：普通完成放小烟花，暴击（随机双倍）放更长时间的大烟花+火箭
     triggerFireworks({ crit: !!result.reward.doubled });
 
     if (result.periodComplete && (result.task.type === 'weekly' || result.task.type === 'monthly')) {
@@ -784,8 +783,6 @@ var targetSrc = flameConfig[kind];
 
     var nowActive = StreakManager.isTodayActive();
 
-    // 火苗视频状态机：刚从未达标切到达标 → 播过渡动画；已达标状态下又完成任务 → 播追加动作
-    // 必须在 renderFlame() 之前调用，renderFlame 的基线渲染才不会打断这段一次性动画
     if (!wasActiveBefore && nowActive) {
       applyFlameVisualState('transition');
     } else if (wasActiveBefore && nowActive) {
@@ -799,6 +796,11 @@ var targetSrc = flameConfig[kind];
     if (!wasActiveBefore && nowActive) {
       playStreakFanfare();
     }
+
+    // 【新增】每次打卡完成都弹一次今日任务数量奖励的进度条页面，2秒后自动消失。
+    // 若本次打卡跨过了新档位（result.newlyClaimedTiers 非空），资源栏数字已经
+    // 在 renderResourceBar() 里更新，弹窗里会显示对应档位标"✓ 已获得"。
+    showQuotaPopup();
   }
 
   /* ------------------------------------------------------------------ *
@@ -926,7 +928,84 @@ var targetSrc = flameConfig[kind];
       if (!done) attachLongPress(ring, task);
     });
   }
+  /* ------------------------------------------------------------------ *
+   * 渲染：每日任务数量奖励（右侧面板 + 打卡完成后的弹窗，共用同一套渲染逻辑）
+   * ------------------------------------------------------------------ */
 
+  /**
+   * 把"今日任务数量奖励"概览渲染进指定容器（右侧常驻面板和弹窗各有一个
+   * 容器，内容完全一致，所以抽成公共函数复用）。
+   * @param {HTMLElement} countEl 显示"已完成 X 个任务"的文字元素
+   * @param {HTMLElement} listEl 进度条列表容器
+   */
+  function renderQuotaInto(countEl, listEl) {
+    var summary = TaskManager.getDailyQuotaSummary();
+    if (countEl) countEl.textContent = '今日已完成 ' + summary.completedCount + ' 个任务';
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+    summary.tiers.forEach(function (tier) {
+      var pct = Math.min(100, Math.round((summary.completedCount / tier.count) * 100));
+
+      var item = document.createElement('div');
+      item.className = 'quota-tier-item';
+
+      var rewardText = tier.primaryResource + getResourceIconPlain('primaryResource') +
+        (tier.currency > 0 ? (' +' + tier.currency + getResourceIconPlain('currency')) : '');
+
+      var label = document.createElement('div');
+      label.className = 'quota-tier-item__label' + (tier.claimed ? ' quota-tier-item__label--claimed' : '');
+      label.innerHTML =
+        '<span>完成 ' + tier.count + ' 个</span>' +
+        '<span>' + (tier.claimed ? '✓ 已获得 ' : '') + rewardText + '</span>';
+
+      var track = document.createElement('div');
+      track.className = 'quota-tier-item__track';
+      var fill = document.createElement('div');
+      fill.className = 'quota-tier-item__fill';
+      fill.style.width = pct + '%';
+      track.appendChild(fill);
+
+      item.appendChild(label);
+      item.appendChild(track);
+      listEl.appendChild(item);
+    });
+  }
+
+  function renderQuotaSidebar() {
+    renderQuotaInto($('quotaCompletedCount'), $('quotaTierList'));
+  }
+
+  /**
+   * 打卡完成后弹出进度条弹窗，2 秒后自动消失。内容跟右侧常驻面板一致。
+   */
+  function showQuotaPopup() {
+    var popup = $('quotaPopup');
+    if (!popup) return;
+    renderQuotaInto($('quotaPopupCount'), $('quotaPopupTierList'));
+    popup.classList.remove('hidden');
+    setTimeout(function () {
+      popup.classList.add('hidden');
+    }, 2000);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 右侧"今日任务奖励"面板 开/关
+   * ------------------------------------------------------------------ */
+
+  function toggleQuotaSidebar(forceState) {
+    var sidebar = $('quotaSidebar');
+    var overlay = $('quotaOverlay');
+    var shouldOpen = typeof forceState === 'boolean' ? forceState : !sidebar.classList.contains('open');
+    sidebar.classList.toggle('open', shouldOpen);
+    overlay.classList.toggle('visible', shouldOpen);
+    if (shouldOpen) renderQuotaSidebar();
+  }
+
+  function bindQuotaToggle() {
+    $('quotaToggleBtn').addEventListener('click', function () { toggleQuotaSidebar(); });
+    $('quotaOverlay').addEventListener('click', function () { toggleQuotaSidebar(false); });
+  }
   /* ------------------------------------------------------------------ *
    * 渲染：中央火苗
    * ------------------------------------------------------------------ */
@@ -1494,7 +1573,7 @@ var targetSrc = flameConfig[kind];
    * 汇总渲染 / 初始化
    * ------------------------------------------------------------------ */
 
-  function renderAll() {
+   function renderAll() {
     renderResourceBar();
     renderTaskSidebar();
     renderFlame();
@@ -1502,14 +1581,16 @@ var targetSrc = flameConfig[kind];
     renderStatsPanel();
     renderTaskManagerPanel();
     renderSettingsPanel();
+    renderQuotaSidebar();   // 【新增】
   }
 
-  function init() {
+   function init() {
     injectDynamicStylesV2();
-    applySavedThemeOnBoot(); // 先应用已保存的皮肤配色，避免首帧闪一下默认配色
+    applySavedThemeOnBoot();
     bindBottomNav();
     bindSidebarToggle();
-    bindModeSwitch();   // 【新增】绑定"连续点击连胜天数"触发模式切换
+    bindQuotaToggle();   // 【新增】
+    bindModeSwitch();
     bindShopStaticEvents();
     bindSettingsEvents();
     bindDomainEvents();

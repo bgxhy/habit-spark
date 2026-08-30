@@ -168,7 +168,10 @@
       success: true,
       task: completion.task,
       reward: reward,
-      periodComplete: completion.periodComplete
+      periodComplete: completion.periodComplete,
+            // 【新增】透传今日任务数量奖励本次新触发的档位，供 ui.js 打卡完成后
+      // 弹出的进度条页面使用，展示"刚刚达成了哪个新档位"。
+      newlyClaimedTiers: completion.newlyClaimedTiers || []
     };
   }
 

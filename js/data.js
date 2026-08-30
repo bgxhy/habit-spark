@@ -81,7 +81,14 @@
       dailyGift: {
         lastClaimedDate: null
       },
-
+       // 【新增】每日任务数量奖励：记录"今天"完成过哪些任务（用任务ID，
+      // 即使一次性任务完成后被删除，这里的记录依然保留，用于计数）、
+      // 今天已经发放过哪些档位的奖励（防止同一天重复领取同一档）。
+      dailyTaskQuota: {
+        date: null,              // 这份记录对应的日期（YYYY-MM-DD），跨天时整体重置
+        completedTaskIds: [],    // 今天已完成的任务 ID 列表（去重）
+        claimedTierCounts: []    // 今天已发放过奖励的档位 count 值列表，比如 [2, 5]
+      },
       // ---- 设置 ----
            settings: {
         reminder: {
@@ -246,7 +253,7 @@
     return safeSetItem(STORAGE_KEY, json);
   }
 
-  function load() {
+    function load() {
     var raw = safeGetItem(STORAGE_KEY);
     var parsed = null;
 
@@ -261,6 +268,13 @@
 
     _state = migrateData(parsed);
     _state.meta.lastOpenedDate = todayKey();
+
+    // 【新增】每日任务数量奖励按天重置：如果记录的日期不是今天，整体清空。
+    var today = todayKey();
+    if (_state.dailyTaskQuota.date !== today) {
+      _state.dailyTaskQuota = { date: today, completedTaskIds: [], claimedTierCounts: [] };
+    }
+
     persist();
     return _state;
   }

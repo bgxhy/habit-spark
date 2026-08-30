@@ -423,10 +423,18 @@
       });
     }
 
+    // 【新增】只有"今天"的打卡才计入每日任务数量奖励（补救过去某天的打卡
+    // 不应该影响"今天"的计数），并把新触发的档位一并返回给调用方（ui.js）
+    // 用于在打卡完成后的进度条弹窗里展示"刚刚达成了哪个新档位"。
+    var newlyClaimedTiers = [];
+    if (dateStr === DataStore.todayKey()) {
+      newlyClaimedTiers = recordDailyQuotaCompletion(taskId);
+    }
     return {
       success: true,
       task: updated,
-      periodComplete: periodComplete
+      periodComplete: periodComplete,
+      newlyClaimedTiers: newlyClaimedTiers
     };
   }
 
@@ -563,7 +571,69 @@
       task: updatedTask
     };
   }
+    /* ------------------------------------------------------------------ *
+   * 【新增】每日任务数量奖励：记录今日完成、计算跨过的新档位
+   * ------------------------------------------------------------------ */
 
+  /**
+   * 记录一个任务 ID 为"今日已完成"（去重），并返回本次调用新增了哪些
+   * 之前没有发放过的档位（按 config.js 里 dailyTaskQuota.tiers 配置判定）。
+   * 注意：本函数只负责"记录 + 判断该发哪些档位"，不负责实际发放奖励，
+   * 实际发放（增加 primaryResource/currency）交给调用方在同一次 mutate
+   * 里完成，避免这里跟 rewards.js 产生反向依赖。
+   * @param {string} taskId
+   * @returns {Array<{count:number, primaryResource:number, currency:number}>}
+   *          本次新触发的档位配置列表（可能是空数组，也可能一次触发多个档位）
+   */
+  function recordDailyQuotaCompletion(taskId) {
+    var newlyClaimedTiers = [];
+
+    DataStore.mutate(function (s) {
+      var quota = s.dailyTaskQuota;
+      if (quota.completedTaskIds.indexOf(taskId) === -1) {
+        quota.completedTaskIds.push(taskId);
+      }
+
+      var completedCount = quota.completedTaskIds.length;
+      var tiers = (CONFIG.dailyTaskQuota && CONFIG.dailyTaskQuota.tiers) || [];
+
+      tiers.forEach(function (tier) {
+        var alreadyClaimed = quota.claimedTierCounts.indexOf(tier.count) !== -1;
+        if (!alreadyClaimed && completedCount >= tier.count) {
+          quota.claimedTierCounts.push(tier.count);
+          newlyClaimedTiers.push(tier);
+          s.resources.primaryResource += (tier.primaryResource || 0);
+          s.resources.currency += (tier.currency || 0);
+          s.stats.totalPrimaryEarned += (tier.primaryResource || 0);
+          s.stats.totalCurrencyEarned += (tier.currency || 0);
+        }
+      });
+    });
+
+    return newlyClaimedTiers;
+  }
+
+  /**
+   * 获取"今日任务数量奖励"当前概览，供 ui.js 渲染右侧面板使用。
+   * @returns {{completedCount:number, tiers:Array<{count:number, primaryResource:number, currency:number, claimed:boolean}>}}
+   */
+  function getDailyQuotaSummary() {
+    var state = DataStore.getState();
+    var quota = state.dailyTaskQuota;
+    var tiers = (CONFIG.dailyTaskQuota && CONFIG.dailyTaskQuota.tiers) || [];
+
+    return {
+      completedCount: quota.completedTaskIds.length,
+      tiers: tiers.map(function (tier) {
+        return {
+          count: tier.count,
+          primaryResource: tier.primaryResource || 0,
+          currency: tier.currency || 0,
+          claimed: quota.claimedTierCounts.indexOf(tier.count) !== -1
+        };
+      })
+    };
+  }
   /* ------------------------------------------------------------------ *
    * 导出模块
    * ------------------------------------------------------------------ */

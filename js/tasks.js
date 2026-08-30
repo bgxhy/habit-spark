@@ -638,7 +638,7 @@
    * 导出模块
    * ------------------------------------------------------------------ */
 
-  global.TaskManager = {
+    global.TaskManager = {
     // CRUD
     listTasks: listTasks,
     getTaskById: getTaskById,
@@ -665,7 +665,11 @@
 
     // 周期达标连续加成
     syncPeriodBonus: syncPeriodBonus,
-    syncAllPeriodBonuses: syncAllPeriodBonuses
+    syncAllPeriodBonuses: syncAllPeriodBonuses,
+
+    // 【新增】每日任务数量奖励
+    recordDailyQuotaCompletion: recordDailyQuotaCompletion,
+    getDailyQuotaSummary: getDailyQuotaSummary
   };
 
 }(typeof window !== 'undefined' ? window : this));

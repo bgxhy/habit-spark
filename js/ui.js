@@ -483,7 +483,30 @@ var targetSrc = flameConfig[kind];
       '.skin-card{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;}',
       '.skin-card__dot{width:14px;height:14px;border-radius:50%;display:inline-block;box-shadow:0 0 0 2px rgba(255,255,255,0.15) inset;}',
       '.skin-card--active{border-color:var(--primary-color);box-shadow:0 0 0 1px var(--primary-color) inset;}',
-      '.task-ring__bonus-badge{position:absolute;top:-4px;left:-4px;font-size:12px;filter:drop-shadow(0 0 4px rgba(255,215,0,0.8));}'
+      '.task-ring__bonus-badge{position:absolute;top:-4px;left:-4px;font-size:12px;filter:drop-shadow(0 0 4px rgba(255,215,0,0.8));}',
+
+      /* 【新增】任务详情弹窗：背景图目前用纯 CSS 渐变+图案实现，不依赖任何
+         图片素材。如果以后想换成真实图片，只需要把 background-image 那一行
+         换成 url("你的图片路径") 即可，其余圆角/遮罩/文字层次都不用动。 */
+      '.task-detail-card{position:relative;overflow:hidden;border-radius:var(--radius-lg);padding:22px 18px;' +
+        'background-image:radial-gradient(circle at 15% 15%, rgba(255,215,0,0.20), transparent 45%),' +
+        'radial-gradient(circle at 85% 85%, rgba(255,138,61,0.18), transparent 50%),' +
+        'repeating-linear-gradient(135deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 2px, transparent 2px, transparent 14px),' +
+        'linear-gradient(160deg, var(--bg-elevated-2), var(--bg-elevated-3));' +
+        'border:1px solid var(--border-strong);box-shadow:inset 0 0 40px rgba(0,0,0,0.35);}',
+      '.task-detail-card__row{display:flex;align-items:baseline;justify-content:space-between;padding:10px 4px;' +
+        'border-bottom:1px solid var(--border-subtle);}',
+      '.task-detail-card__row:last-child{border-bottom:none;}',
+      '.task-detail-card__value{font-size:26px;font-weight:800;color:var(--primary-color);' +
+        'text-shadow:0 0 12px rgba(255,215,0,0.35);}',
+      '.task-detail-card__label{font-size:13px;color:var(--text-secondary);}',
+      '.task-detail-card__hint{margin-top:14px;font-size:11.5px;color:var(--text-muted);text-align:center;}',
+
+      /* 任务管理页里，daily/weekly/monthly 任务条目可点击查看详情，
+         鼠标悬停给个手型光标提示；一次性任务不绑定详情点击，样式上不加提示 */
+      '.tm-item__title--clickable{cursor:pointer;}',
+      '.tm-item__title--clickable:hover{color:var(--primary-color);}',
+      '.tm-item__chevron{color:var(--text-muted);font-size:12px;margin-left:4px;}'
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -1335,6 +1358,44 @@ var targetSrc = flameConfig[kind];
     showModalRaw();
   }
 
+  /**
+   * 【新增】任务详情弹窗：展示该任务的累计完成次数、当前连续天数、
+   * 历史最长连续天数。一次性任务不适用（TaskManager.getTaskStreakStats
+   * 只应对 daily/weekly/monthly 任务调用，调用方已在绑定点做了类型过滤）。
+   * @param {object} task
+   */
+  function openTaskDetailModal(task) {
+    var area = ensureModalFormArea();
+    area.innerHTML = '';
+
+    var stats = TaskManager.getTaskStreakStats(task);
+
+    var card = document.createElement('div');
+    card.className = 'task-detail-card';
+    card.innerHTML =
+      '<div class="task-detail-card__row">' +
+        '<span class="task-detail-card__value">' + stats.totalCompletions + '</span>' +
+        '<span class="task-detail-card__label">累计完成次数</span>' +
+      '</div>' +
+      '<div class="task-detail-card__row">' +
+        '<span class="task-detail-card__value">' + stats.currentStreak + '</span>' +
+        '<span class="task-detail-card__label">当前连续天数</span>' +
+      '</div>' +
+      '<div class="task-detail-card__row">' +
+        '<span class="task-detail-card__value">' + stats.longestStreak + '</span>' +
+        '<span class="task-detail-card__label">历史最长连续</span>' +
+      '</div>' +
+      '<div class="task-detail-card__hint">统计仅针对这个任务本身，与全局连胜天数是两回事</div>';
+    area.appendChild(card);
+
+    $('modalTitle').textContent = task.name;
+    $('modalMessage').textContent = '';
+    $('modalConfirmBtn').style.display = 'none'; // 详情页只看不改，隐藏"确认"按钮，只留关闭
+    $('modalCancelBtn').textContent = '关闭';
+    $('modalCancelBtn').onclick = function () { hideModal(); };
+    showModalRaw();
+  }
+
   function renderTaskManagerList() {
     var listEl = $('taskManagerList');
     var emptyEl = $('taskManagerListEmpty');
@@ -1357,9 +1418,15 @@ var targetSrc = flameConfig[kind];
 
       var titleWrap = document.createElement('div');
       var typeLabel = (CONFIG.taskTypeLabels && CONFIG.taskTypeLabels[task.type]) || task.type;
+      var isDetailable = task.type !== 'once'; // 一次性任务没有"累计次数/连胜"的意义，不开详情入口
       titleWrap.innerHTML =
         '<strong>' + escapeHtml(task.name) + '</strong> ' +
-        '<span style="color:var(--text-muted);font-size:11px;">[' + escapeHtml(typeLabel) + ']</span>';
+        '<span style="color:var(--text-muted);font-size:11px;">[' + escapeHtml(typeLabel) + ']</span>' +
+        (isDetailable ? '<span class="tm-item__chevron">›</span>' : '');
+      if (isDetailable) {
+        titleWrap.classList.add('tm-item__title--clickable');
+        titleWrap.addEventListener('click', function () { openTaskDetailModal(task); });
+      }
 
       var switchLabel = document.createElement('label');
       switchLabel.className = 'switch';

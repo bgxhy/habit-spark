@@ -152,6 +152,49 @@
   }
 
   /**
+   * 【新增】统计单个任务自己的完成情况：累计完成次数 + 当前连续天数 +
+   * 历史最长连续天数。算法与 streak.js 对全局 activeDates 的算法一致，
+   * 但作用对象换成这个任务自己的 completions ——不区分任务类型/周期
+   * （即"不管周期"），只看这个任务哪些日历日上有打卡记录。
+   *
+   * 注意：对 weekly/monthly 任务而言，这个"连续天数"是指"日历日连续"，
+   * 不是"连续周期达标"（那是 syncPeriodBonus 在维护的另一件事，两者是
+   * 不同指标）。一次性任务不适用本函数（调用方应自行按 type 过滤）。
+   * @param {object} task
+   * @returns {{totalCompletions:number, currentStreak:number, longestStreak:number}}
+   */
+  function getTaskStreakStats(task) {
+    var totalCompletions = getTotalCompletions(task);
+
+    var dates = Object.keys(task.completions || {})
+      .filter(function (k) { return task.completions[k] > 0; })
+      .sort();
+
+    var longestStreak = 0;
+    var run = 0;
+    var prevDate = null;
+    dates.forEach(function (d) {
+      run = (prevDate && addDays(prevDate, 1) === d) ? (run + 1) : 1;
+      if (run > longestStreak) longestStreak = run;
+      prevDate = d;
+    });
+
+    var todayKey = DataStore.todayKey();
+    var cursor = (task.completions && task.completions[todayKey] > 0) ? todayKey : addDays(todayKey, -1);
+    var currentStreak = 0;
+    while (task.completions && task.completions[cursor] > 0) {
+      currentStreak += 1;
+      cursor = addDays(cursor, -1);
+    }
+
+    return {
+      totalCompletions: totalCompletions,
+      currentStreak: currentStreak,
+      longestStreak: longestStreak
+    };
+  }
+
+  /**
    * 判断任务在 dateStr 所在周期是否已达标（once 判断全部历史）。
    * @param {object} task
    * @param {string} [dateStr]
@@ -654,6 +697,7 @@
     getPeriodRange: getPeriodRange,
     getTaskProgress: getTaskProgress,
     getTotalCompletions: getTotalCompletions,
+    getTaskStreakStats: getTaskStreakStats,
     isTaskDoneForPeriod: isTaskDoneForPeriod,
     isTaskAvailable: isTaskAvailable,
     wasAnyTaskCompletedOn: wasAnyTaskCompletedOn,

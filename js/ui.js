@@ -1358,10 +1358,201 @@ var targetSrc = flameConfig[kind];
     showModalRaw();
   }
 
+  /* ------------------------------------------------------------------ *
+   * 【新增】任务详情分享卡片：点击详情卡片直接 Canvas 画一张暖色调
+   * 分享图并触发下载，不截图现有深色弹窗。背景/文字颜色读
+   * config.js 的 CONFIG.shareCard，未配置背景图时用渐变兜底。
+   * ------------------------------------------------------------------ */
+
+  function getShareCardStyle() {
+    var cfg = CONFIG.shareCard || {};
+    var list = cfg.styles || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === cfg.defaultStyleId) return list[i];
+    }
+    return list[0] || { gradient: ['#FFC24B', '#FF9500', '#FF6A1A'], textColor: '#ffffff', accentColor: '#fff4d6' };
+  }
+
   /**
-   * 【新增】任务详情弹窗：展示该任务的累计完成次数、当前连续天数、
-   * 历史最长连续天数。一次性任务不适用（TaskManager.getTaskStreakStats
-   * 只应对 daily/weekly/monthly 任务调用，调用方已在绑定点做了类型过滤）。
+   * 加载分享卡片背景图（如果配置了 backgroundImage）。未配置或加载失败
+   * 都静默 resolve(null)，调用方据此回退到渐变背景，不会中断整个流程。
+   * @param {object} styleCfg
+   * @returns {Promise<HTMLImageElement|null>}
+   */
+  function loadShareCardBackground(styleCfg) {
+    if (!styleCfg.backgroundImage) return Promise.resolve(null);
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { resolve(null); };
+      img.src = styleCfg.backgroundImage;
+    });
+  }
+
+  function drawShareCardBackground(ctx, styleCfg, bgImage, size) {
+    if (bgImage) {
+      var scale = Math.max(size / bgImage.width, size / bgImage.height);
+      var w = bgImage.width * scale;
+      var h = bgImage.height * scale;
+      ctx.drawImage(bgImage, (size - w) / 2, (size - h) / 2, w, h);
+      return;
+    }
+
+    var colors = styleCfg.gradient || ['#FFC24B', '#FF9500', '#FF6A1A'];
+    var grad = ctx.createLinearGradient(0, 0, size, size);
+    var step = colors.length > 1 ? 1 / (colors.length - 1) : 1;
+    colors.forEach(function (c, i) { grad.addColorStop(i * step, c); });
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // 模拟暖色卡片常见的柔光光斑，叠在吉祥物区域后面增加层次
+    var glow = ctx.createRadialGradient(size * 0.72, size * 0.6, 10, size * 0.72, size * 0.6, size * 0.5);
+    glow.addColorStop(0, 'rgba(255,255,255,0.32)');
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, size, size);
+  }
+
+  /**
+   * 画 App 自己的火苗吉祥物（复用 index.html 里 .flame-path 的 SVG 路径
+   * 数据），不使用任何第三方角色形象。
+   */
+  function drawShareCardMascot(ctx, size) {
+    var path = new Path2D(
+      'M100 8C70 46 46 78 46 120c0 40 24 74 54 90 30-16 54-50 54-90 0-22-10-42-22-58 2 20-6 34-18 40 8-22 2-46-14-94z'
+    );
+
+    var targetHeight = size * 0.44;
+    var scale = targetHeight / 240; // 原始 viewBox 高度 240
+    var mascotWidth = 200 * scale;
+    var offsetX = size - mascotWidth - size * 0.06;
+    var offsetY = size - targetHeight - size * 0.10;
+
+    ctx.save();
+
+    var glow = ctx.createRadialGradient(
+      offsetX + mascotWidth / 2, offsetY + targetHeight / 2, 10,
+      offsetX + mascotWidth / 2, offsetY + targetHeight / 2, targetHeight * 0.85
+    );
+    glow.addColorStop(0, 'rgba(255, 240, 200, 0.55)');
+    glow.addColorStop(1, 'rgba(255, 240, 200, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    var flameGrad = ctx.createLinearGradient(0, 240, 0, 0);
+    flameGrad.addColorStop(0, '#ff3d3d');
+    flameGrad.addColorStop(0.55, '#ff8a3d');
+    flameGrad.addColorStop(1, '#ffd700');
+    ctx.fillStyle = flameGrad;
+    ctx.fill(path);
+
+    ctx.restore();
+  }
+
+  /** 从 startSize 开始逐步缩小字号，直到文字宽度不超过 maxWidth。 */
+  function fitFontSize(ctx, text, maxWidth, startSize, fontFamily) {
+    var size = startSize;
+    while (size > 10) {
+      ctx.font = '800 ' + size + 'px ' + fontFamily;
+      if (ctx.measureText(text).width <= maxWidth) break;
+      size -= 2;
+    }
+    return size;
+  }
+
+  function drawShareCardText(ctx, task, stats, styleCfg, size) {
+    var fontFamily = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif';
+    var textColor = styleCfg.textColor || '#ffffff';
+    var padLeft = size * 0.08;
+    var maxTextWidth = size * 0.6; // 避开右下角吉祥物区域
+
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = textColor;
+    ctx.shadowColor = 'rgba(0,0,0,0.18)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 3;
+
+    var titleText = '「' + task.name + '」';
+    var titleSize = fitFontSize(ctx, titleText, maxTextWidth, size * 0.052, fontFamily);
+    ctx.font = '700 ' + titleSize + 'px ' + fontFamily;
+    ctx.fillText(titleText, padLeft, size * 0.20);
+
+    ctx.font = '700 ' + (size * 0.05) + 'px ' + fontFamily;
+    ctx.fillText('已连续完成', padLeft, size * 0.30);
+
+    ctx.font = '800 ' + (size * 0.22) + 'px ' + fontFamily;
+    ctx.fillText(String(stats.displayStreak), padLeft, size * 0.50);
+
+    ctx.font = '700 ' + (size * 0.06) + 'px ' + fontFamily;
+    ctx.fillText(stats.displayUnit + '！', padLeft, size * 0.60);
+
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    ctx.globalAlpha = 0.85;
+    ctx.font = '800 ' + (size * 0.045) + 'px ' + fontFamily;
+    ctx.fillText((CONFIG.app && CONFIG.app.shortName) || 'Habit Spark', padLeft, size * 0.94);
+    ctx.globalAlpha = 1;
+  }
+
+  function buildShareCardFilename(task) {
+    var safeName = String(task.name || 'task').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 20) || 'task';
+    var d = new Date();
+    var pad2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+    var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
+    return 'habit_spark_share_' + safeName + '_' + stamp + '.png';
+  }
+
+  /**
+   * 生成分享卡片图片并触发浏览器下载。点击任务详情卡片本身即调用本函数，
+   * 不需要额外按钮。绘制内容只包含卡片本身的视觉元素（任务名/数字/吉祥
+   * 物/品牌落款），详情弹窗里的"关闭"按钮和统计说明文字都不会出现在
+   * 生成的图片里——因为图片是重新画的，不是截图弹窗 DOM。
+   * @param {object} task
+   * @param {object} stats TaskManager.getTaskStreakStats(task) 的结果
+   */
+  function generateAndDownloadShareCard(task, stats) {
+    var styleCfg = getShareCardStyle();
+    var CARD_SIZE = 1000;
+
+    showToast('正在生成图片…');
+
+    loadShareCardBackground(styleCfg).then(function (bgImage) {
+      var canvas = document.createElement('canvas');
+      canvas.width = CARD_SIZE;
+      canvas.height = CARD_SIZE;
+      var ctx = canvas.getContext('2d');
+
+      drawShareCardBackground(ctx, styleCfg, bgImage, CARD_SIZE);
+      drawShareCardMascot(ctx, CARD_SIZE);
+      drawShareCardText(ctx, task, stats, styleCfg, CARD_SIZE);
+
+      canvas.toBlob(function (blob) {
+        if (!blob) { showToast('图片生成失败，请重试'); return; }
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = buildShareCardFilename(task);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        showToast('图片已保存');
+      }, 'image/png');
+    }).catch(function (e) {
+      console.error('[ShareCard] 生成失败', e);
+      showToast('图片生成失败，请重试');
+    });
+  }
+
+  /**
+   * 【新增】任务详情弹窗：展示该任务的累计完成次数、当前连续（天数/周期数
+   * 取更大值展示）、历史最长连续天数。一次性任务不适用（调用方已在绑定点
+   * 做了类型过滤）。点击卡片本身会直接生成并保存分享图片。
    * @param {object} task
    */
   function openTaskDetailModal(task) {
@@ -1372,20 +1563,30 @@ var targetSrc = flameConfig[kind];
 
     var card = document.createElement('div');
     card.className = 'task-detail-card';
+    card.style.cursor = 'pointer';
+    card.title = '点击保存为分享图片';
     card.innerHTML =
       '<div class="task-detail-card__row">' +
         '<span class="task-detail-card__value">' + stats.totalCompletions + '</span>' +
         '<span class="task-detail-card__label">累计完成次数</span>' +
       '</div>' +
       '<div class="task-detail-card__row">' +
-        '<span class="task-detail-card__value">' + stats.currentStreak + '</span>' +
-        '<span class="task-detail-card__label">当前连续天数</span>' +
+        '<span class="task-detail-card__value">' + stats.displayStreak + stats.displayUnit + '</span>' +
+        '<span class="task-detail-card__label">当前连续' +
+          (stats.displayUnit !== '天' ? '（天数与达标周期数取更大值）' : '') +
+        '</span>' +
       '</div>' +
       '<div class="task-detail-card__row">' +
         '<span class="task-detail-card__value">' + stats.longestStreak + '</span>' +
-        '<span class="task-detail-card__label">历史最长连续</span>' +
+        '<span class="task-detail-card__label">历史最长连续（天）</span>' +
       '</div>' +
-      '<div class="task-detail-card__hint">统计仅针对这个任务本身，与全局连胜天数是两回事</div>';
+      '<div class="task-detail-card__hint">统计仅针对这个任务本身，与全局连胜天数是两回事</div>' +
+      '<div class="task-detail-card__hint">点击卡片保存为分享图片</div>';
+
+    card.addEventListener('click', function () {
+      generateAndDownloadShareCard(task, stats);
+    });
+
     area.appendChild(card);
 
     $('modalTitle').textContent = task.name;

@@ -98,6 +98,22 @@
   }
 
   /**
+   * 【新增】getNextPeriodStartKey 的反向版本：计算上一个自然周期的起始日。
+   * @param {'weekly'|'monthly'} type
+   * @param {string} periodStartKey
+   * @returns {string|null}
+   */
+  function getPreviousPeriodStartKey(type, periodStartKey) {
+    if (type === 'weekly') return addDays(periodStartKey, -7);
+    if (type === 'monthly') {
+      var d = parseDateKey(periodStartKey);
+      var prev = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+      return DataStore.formatDateKey(prev);
+    }
+    return null;
+  }
+
+  /**
    * 获取指定任务类型在 dateStr 所在自然周期的日期区间（含首尾）。
    * once 类型无周期概念，返回 { start: null, end: null } 表示统计全部历史。
    * @param {'once'|'daily'|'weekly'|'monthly'} type
@@ -152,16 +168,59 @@
   }
 
   /**
-   * 【新增】统计单个任务自己的完成情况：累计完成次数 + 当前连续天数 +
-   * 历史最长连续天数。算法与 streak.js 对全局 activeDates 的算法一致，
-   * 但作用对象换成这个任务自己的 completions ——不区分任务类型/周期
-   * （即"不管周期"），只看这个任务哪些日历日上有打卡记录。
-   *
-   * 注意：对 weekly/monthly 任务而言，这个"连续天数"是指"日历日连续"，
-   * 不是"连续周期达标"（那是 syncPeriodBonus 在维护的另一件事，两者是
-   * 不同指标）。一次性任务不适用本函数（调用方应自行按 type 过滤）。
+   * 【新增】计算任务"连续达标的周期数"（仅 weekly/monthly 有意义）：
+   * 从当前周期开始往回数，只要该周期累计次数达到 targetCount 就计入，
+   * 遇到第一个不达标的周期就停止。当前周期若还没结束但已经达标，也计入。
+   * daily/once 类型直接返回 0（周期概念对它们不适用）。
    * @param {object} task
-   * @returns {{totalCompletions:number, currentStreak:number, longestStreak:number}}
+   * @param {string} [dateStr] 默认今天
+   * @returns {number}
+   */
+  function getTaskPeriodStreak(task, dateStr) {
+    if (task.type !== 'weekly' && task.type !== 'monthly') return 0;
+    dateStr = dateStr || DataStore.todayKey();
+
+    var target = task.targetCount || 1;
+    var currentPeriodKey = getPeriodRange(task.type, dateStr).start;
+    var currentSum = sumCompletionsInRange(task.completions, getPeriodRange(task.type, dateStr));
+
+    var count = 0;
+    var cursor;
+    if (currentSum >= target) {
+      count = 1;
+      cursor = getPreviousPeriodStartKey(task.type, currentPeriodKey);
+    } else {
+      cursor = getPreviousPeriodStartKey(task.type, currentPeriodKey);
+    }
+
+    var guard = 0; // 安全护栏，避免异常数据导致死循环
+    while (cursor && guard < 1000) {
+      var range = getPeriodRange(task.type, cursor);
+      var sum = sumCompletionsInRange(task.completions, range);
+      if (sum < target) break;
+      count += 1;
+      cursor = getPreviousPeriodStartKey(task.type, cursor);
+      guard += 1;
+    }
+
+    return count;
+  }
+
+  /**
+   * 【新增】统计单个任务自己的完成情况：累计完成次数 + 当前连续天数 +
+   * 历史最长连续天数 + 连续达标周期数。算法与 streak.js 对全局
+   * activeDates 的算法一致，但作用对象换成这个任务自己的 completions
+   * ——不区分任务类型/周期（即"不管周期"），只看这个任务哪些日历日上
+   * 有打卡记录。
+   *
+   * 注意：对 weekly/monthly 任务而言，currentStreak 是指"日历日连续"，
+   * periodStreak 才是"连续周期达标"——两者是不同指标。displayStreak /
+   * displayUnit 取两者中较大的一个，供 ui.js 直接展示（例如周任务连续
+   * 3 周达标但日历日只连了 2 天，会展示"3 周"而不是"2 天"）。
+   * 一次性任务不适用本函数（调用方应自行按 type 过滤）。
+   * @param {object} task
+   * @returns {{totalCompletions:number, currentStreak:number, longestStreak:number,
+   *            periodStreak:number, displayStreak:number, displayUnit:string}}
    */
   function getTaskStreakStats(task) {
     var totalCompletions = getTotalCompletions(task);
@@ -187,10 +246,16 @@
       cursor = addDays(cursor, -1);
     }
 
+    var periodStreak = getTaskPeriodStreak(task);
+    var usePeriod = periodStreak > currentStreak;
+
     return {
       totalCompletions: totalCompletions,
       currentStreak: currentStreak,
-      longestStreak: longestStreak
+      longestStreak: longestStreak,
+      periodStreak: periodStreak,
+      displayStreak: usePeriod ? periodStreak : currentStreak,
+      displayUnit: usePeriod ? (task.type === 'monthly' ? '月' : '周') : '天'
     };
   }
 
@@ -698,6 +763,7 @@
     getTaskProgress: getTaskProgress,
     getTotalCompletions: getTotalCompletions,
     getTaskStreakStats: getTaskStreakStats,
+    getTaskPeriodStreak: getTaskPeriodStreak,
     isTaskDoneForPeriod: isTaskDoneForPeriod,
     isTaskAvailable: isTaskAvailable,
     wasAnyTaskCompletedOn: wasAnyTaskCompletedOn,

@@ -331,7 +331,8 @@
         {
           id: 'duolingo-orange',
           name: '暖橙经典',
-          backgroundImage: null, // 未提供图片，使用下面的 gradient 渐变
+          backgroundImage: 'assets/skins/video-fanren/1.jpg', // 未提供图片，使用下面的 gradient 渐变
+          
           gradient: ['#FFC24B', '#FF9500', '#FF6A1A'], // 左上 → 右下
           textColor: '#ffffff',
           accentColor: '#fff4d6' // 数字外发光/吉祥物高光用色

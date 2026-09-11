@@ -523,6 +523,19 @@ var targetSrc = flameConfig[kind];
     return div.innerHTML;
   }
 
+  /**
+   * 资源数值展示格式化：最多显示1位小数，整数不带小数点。
+   * 数据层存的是精确原始值（周期加成1.5倍叠加后可能出现小数），
+   * 本函数只用于展示，不影响任何已存储的数据精度。
+   * @param {number} n
+   * @returns {string}
+   */
+  function formatResourceValue(n) {
+    var num = typeof n === 'number' && !isNaN(n) ? n : 0;
+    var rounded = Math.round(num * 10) / 10;
+    return (rounded % 1 === 0) ? String(rounded) : rounded.toFixed(1);
+  }
+
   function vibrate(pattern) {
     try {
       if (global.navigator && global.navigator.vibrate) {
@@ -794,7 +807,7 @@ var targetSrc = flameConfig[kind];
 
     var flameEl = $('flameWrap');
     var bonusTag = result.reward.bonusApplied ? ' ✨加成中' : '';
-    var rewardText = '+' + result.reward.primaryResource + ' ' + getResourceIconPlain('primaryResource') +
+    var rewardText = '+' + formatResourceValue(result.reward.primaryResource) + ' ' + getResourceIconPlain('primaryResource') +
       (result.reward.doubled ? ' 双倍！' : '') + bonusTag;
     spawnFloatingText(flameEl, rewardText);
 
@@ -872,7 +885,7 @@ var targetSrc = flameConfig[kind];
     }
     vibrate(20);
     playChime();
-    showToast('每日礼包 +' + result.reward.primaryResource + ' ' + getResourceIconPlain('primaryResource'));
+    showToast('每日礼包 +' + formatResourceValue(result.reward.primaryResource) + ' ' + getResourceIconPlain('primaryResource'));
     renderResourceBar();
     renderDailyGiftButton();
   }
@@ -886,9 +899,9 @@ var targetSrc = flameConfig[kind];
     setResourceIcon('iconPrimary', 'primaryResource');
     setResourceIcon('iconCurrency', 'currency');
     setResourceIcon('iconShield', 'streakFreeze');
-    $('valPrimary').textContent = state.resources.primaryResource;
-    $('valCurrency').textContent = state.resources.currency;
-    $('valShield').textContent = state.resources.streakFreeze;
+    $('valPrimary').textContent = formatResourceValue(state.resources.primaryResource);
+    $('valCurrency').textContent = formatResourceValue(state.resources.currency);
+    $('valShield').textContent = formatResourceValue(state.resources.streakFreeze);
   }
 
   /* ------------------------------------------------------------------ *
@@ -973,8 +986,8 @@ var targetSrc = flameConfig[kind];
       var item = document.createElement('div');
       item.className = 'quota-tier-item';
 
-      var rewardText = tier.primaryResource + getResourceIconPlain('primaryResource') +
-        (tier.currency > 0 ? (' +' + tier.currency + getResourceIconPlain('currency')) : '');
+      var rewardText = formatResourceValue(tier.primaryResource) + getResourceIconPlain('primaryResource') +
+        (tier.currency > 0 ? (' +' + formatResourceValue(tier.currency) + getResourceIconPlain('currency')) : '');
 
       var label = document.createElement('div');
       label.className = 'quota-tier-item__label' + (tier.claimed ? ' quota-tier-item__label--claimed' : '');
@@ -1095,7 +1108,7 @@ var targetSrc = flameConfig[kind];
       var buyBtn = document.createElement('button');
       buyBtn.type = 'button';
       buyBtn.className = 'btn btn--primary';
-      buyBtn.innerHTML = item.price + ' ' + getResourceIconHtml(item.priceType);
+      buyBtn.innerHTML = formatResourceValue(item.price) + ' ' + getResourceIconHtml(item.priceType);
       buyBtn.disabled = !item.purchasable;
       buyBtn.style.opacity = item.purchasable ? '1' : '0.5';
       buyBtn.style.flexShrink = '0';
@@ -1134,7 +1147,7 @@ var targetSrc = flameConfig[kind];
         resultEl.textContent = res.reason === 'insufficient_primary' ? '主资源不足' : '请输入有效兑换数量';
         return;
       }
-      resultEl.textContent = '兑换成功：-' + res.primaryCost + ' / +' + res.currencyGain;
+      resultEl.textContent = '兑换成功：-' + formatResourceValue(res.primaryCost) + ' / +' + formatResourceValue(res.currencyGain);
       $('exchangeAmountInput').value = '';
       playChime();
       renderResourceBar();
@@ -1150,8 +1163,8 @@ var targetSrc = flameConfig[kind];
     $('statCurrentStreak').textContent = state.streak.current || 0;
     $('statLongestStreak').textContent = state.streak.longest || 0;
     $('statTotalTasks').textContent = state.stats.totalTasksCompleted || 0;
-    $('statTotalPrimary').textContent = state.stats.totalPrimaryEarned || 0;
-    $('statTotalCurrency').textContent = state.stats.totalCurrencyEarned || 0;
+    $('statTotalPrimary').textContent = formatResourceValue(state.stats.totalPrimaryEarned || 0);
+    $('statTotalCurrency').textContent = formatResourceValue(state.stats.totalCurrencyEarned || 0);
     $('statTotalPrimaryLabel').innerHTML = getResourceIconHtml('primaryResource') + ' 累计获取';
     $('statTotalCurrencyLabel').innerHTML = getResourceIconHtml('currency') + ' 累计获取';
     renderFreezeLog();
@@ -1215,7 +1228,7 @@ var targetSrc = flameConfig[kind];
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn btn--block btn--ghost';
-      btn.innerHTML = escapeHtml(t.name) + ' &nbsp;+' + t.baseResourceReward + ' ' + getResourceIconHtml('primaryResource');
+      btn.innerHTML = escapeHtml(t.name) + ' &nbsp;+' + formatResourceValue(t.baseResourceReward) + ' ' + getResourceIconHtml('primaryResource');
       btn.addEventListener('click', function () {
         var res = TaskManager.rescueTask(t.id, dayEntry.date);
         hideModal();
@@ -1480,14 +1493,25 @@ var targetSrc = flameConfig[kind];
     ctx.font = '700 ' + titleSize + 'px ' + fontFamily;
     ctx.fillText(titleText, padLeft, size * 0.20);
 
+    // 【改动】"已连续完成 + 数字 + 单位" 改成同一行显示，不再换行，
+    // 例如"已连续完成5天！"。用 measureText 依次算出每段文字的宽度，
+    // 让数字段用更大字号突出显示，同时和前后文字保持在同一条基线上。
+    var lineY = size * 0.42;
+    var cursorX = padLeft;
+
     ctx.font = '700 ' + (size * 0.05) + 'px ' + fontFamily;
-    ctx.fillText('已连续完成', padLeft, size * 0.30);
+    var prefixText = '已连续完成';
+    ctx.fillText(prefixText, cursorX, lineY);
+    cursorX += ctx.measureText(prefixText).width + size * 0.01;
 
-    ctx.font = '800 ' + (size * 0.22) + 'px ' + fontFamily;
-    ctx.fillText(String(stats.displayStreak), padLeft, size * 0.50);
+    ctx.font = '800 ' + (size * 0.14) + 'px ' + fontFamily;
+    var numberText = String(stats.displayStreak);
+    ctx.fillText(numberText, cursorX, lineY);
+    cursorX += ctx.measureText(numberText).width + size * 0.01;
 
-    ctx.font = '700 ' + (size * 0.06) + 'px ' + fontFamily;
-    ctx.fillText(stats.displayUnit + '！', padLeft, size * 0.60);
+    ctx.font = '700 ' + (size * 0.05) + 'px ' + fontFamily;
+    var suffixText = stats.displayUnit + '！';
+    ctx.fillText(suffixText, cursorX, lineY);
 
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
